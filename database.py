@@ -48,20 +48,25 @@ else:
 
 logger.info(f"Connecting to database...")
 
+# 为 Vercel 环境优化的数据库配置
+IS_VERCEL = os.getenv('VERCEL') == '1'
+
 try:
     # 创建异步引擎
     engine = create_async_engine(
         POSTGRES_URL,
         echo=False,
-        pool_pre_ping=True,
-        pool_size=20,
+        # Vercel 环境使用较小的连接池
+        pool_size=1 if IS_VERCEL else 20,
         max_overflow=0,
         pool_timeout=30,
-        pool_recycle=1800,
+        # Vercel 环境下更快地回收连接
+        pool_recycle=1800 if not IS_VERCEL else 300,
+        # Vercel 环境下更短的命令超时
         connect_args={
             "ssl": True,
             "server_settings": {"client_encoding": "utf8"},
-            "command_timeout": 10
+            "command_timeout": 5 if IS_VERCEL else 10
         }
     )
     
@@ -97,24 +102,29 @@ async def get_db():
     """异步上下文管理器获取数据库会话"""
     session = async_session_factory()
     try:
+        await session.execute("SELECT 1")  # 验证连接
         yield session
+    except Exception as e:
+        logger.error(f"Database connection error: {str(e)}")
+        await session.rollback()
+        raise
     finally:
         await session.close()
 
 # 创建数据库会话
 async def get_session() -> AsyncSession:
+    """获取数据库会话的依赖函数"""
     async with get_db() as session:
         try:
-            # 测试数据库连接
-            await session.execute("SELECT 1")
             yield session
         except Exception as e:
-            logger.error(f"Database session error: {str(e)}")
+            logger.error(f"Session error: {str(e)}")
             await session.rollback()
             raise
 
 # 初始化数据库
 async def init_db():
+    """初始化数据库表结构"""
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

@@ -14,6 +14,8 @@ import subprocess
 import sys
 import os
 import traceback
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -109,15 +111,30 @@ async def run_registration():
 async def startup_event():
     """启动时初始化数据库并开始自动注册进程"""
     try:
-        await init_db()
-        logger.info("Database initialized successfully")
-        
-        # 启动自动注册任务
-        asyncio.create_task(run_registration())
-        logger.info("Auto registration task started")
+        # 在 Vercel 环境中跳过数据库初始化
+        if not os.getenv('VERCEL'):
+            await init_db()
+            logger.info("Database initialized successfully")
+            
+            # 只在非 Vercel 环境启动自动注册任务
+            asyncio.create_task(run_registration())
+            logger.info("Auto registration task started")
     except Exception as e:
         logger.error(f"Startup error: {str(e)}")
         raise
+
+@app.middleware("http")
+async def db_session_middleware(request: Request, call_next):
+    """数据库会话中间件"""
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Request error: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"}
+        )
 
 async def import_accounts_from_file():
     """从本地文件导入账号到数据库"""
