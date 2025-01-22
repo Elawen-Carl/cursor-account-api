@@ -1,15 +1,16 @@
 {
     "version": 2,
-    "builds": [
-        {
-            "src": "api.py",
-            "use": "@vercel/python"
-        }
-    ],
+    "framework": "fastapi",
     "routes": [
         {
             "src": "/(.*)",
             "dest": "api.py"
         }
-    ]
+    ],
+    "functions": {
+        "api.py": {
+            "memory": 1024,
+            "maxDuration": 10
+        }
+    }
 } 
