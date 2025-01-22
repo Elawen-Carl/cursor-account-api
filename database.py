@@ -5,72 +5,52 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import logging
-from contextlib import asynccontextmanager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 只在非生产环境加载 .env 文件
-if not os.getenv('VERCEL'):
-    load_dotenv()
+load_dotenv()
 
-# 从环境变量获取数据库配置
-DB_USER = os.getenv('POSTGRES_USER')
-DB_PASSWORD = os.getenv('POSTGRES_PASSWORD')
-DB_HOST = os.getenv('POSTGRES_HOST')
-DB_NAME = os.getenv('POSTGRES_DATABASE')
-
-# 检查是否存在 POSTGRES_URL（Vercel 集成数据库会提供这个）
-POSTGRES_URL = os.getenv('POSTGRES_URL')
-
-if POSTGRES_URL:
-    logger.info("Using direct POSTGRES_URL from environment")
-else:
-    # 检查必要的环境变量
-    missing_vars = []
-    if not DB_USER:
-        missing_vars.append('POSTGRES_USER')
-    if not DB_PASSWORD:
-        missing_vars.append('POSTGRES_PASSWORD')
-    if not DB_HOST:
-        missing_vars.append('POSTGRES_HOST')
-    if not DB_NAME:
-        missing_vars.append('POSTGRES_DATABASE')
-
+def get_database_url():
+    """获取数据库URL并验证配置"""
+    required_vars = {
+        'POSTGRES_USER': os.getenv('POSTGRES_USER'),
+        'POSTGRES_PASSWORD': os.getenv('POSTGRES_PASSWORD'),
+        'POSTGRES_HOST': os.getenv('POSTGRES_HOST'),
+        'POSTGRES_DATABASE': os.getenv('POSTGRES_DATABASE')
+    }
+    
+    # 检查所有必需的环境变量
+    missing_vars = [key for key, value in required_vars.items() if not value]
     if missing_vars:
         error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
         logger.error(error_msg)
         raise ValueError(error_msg)
-
+    
     # 构建数据库URL
-    POSTGRES_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
-
-logger.info(f"Connecting to database...")
-
-# 为 Vercel 环境优化的数据库配置
-IS_VERCEL = os.getenv('VERCEL') == '1'
+    url = f"postgresql+asyncpg://{required_vars['POSTGRES_USER']}:{required_vars['POSTGRES_PASSWORD']}@{required_vars['POSTGRES_HOST']}/{required_vars['POSTGRES_DATABASE']}"
+    logger.info(f"Database configuration loaded successfully")
+    return url
 
 try:
+    # 获取数据库URL
+    POSTGRES_URL = get_database_url()
+    
     # 创建异步引擎
     engine = create_async_engine(
         POSTGRES_URL,
         echo=False,
-        # Vercel 环境使用较小的连接池
-        pool_size=1 if IS_VERCEL else 20,
-        max_overflow=0,
-        pool_timeout=30,
-        # Vercel 环境下更快地回收连接
-        pool_recycle=1800 if not IS_VERCEL else 300,
-        # Vercel 环境下更短的命令超时
         connect_args={
             "ssl": True,
-            "server_settings": {"client_encoding": "utf8"},
-            "command_timeout": 5 if IS_VERCEL else 10
-        }
+            "server_settings": {"client_encoding": "utf8"}
+        },
+        pool_pre_ping=True,
+        pool_size=20,  # 设置连接池大小
+        max_overflow=10  # 允许的最大连接数超过池大小的数量
     )
     
-    async_session_factory = sessionmaker(
+    async_session = sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
@@ -78,8 +58,10 @@ try:
         autoflush=False
     )
     
+    logger.info("Database engine and session configured successfully")
+    
 except Exception as e:
-    logger.error(f"Failed to create database engine: {str(e)}")
+    logger.error(f"Failed to initialize database: {str(e)}")
     raise
 
 # 基础模型类
@@ -97,38 +79,29 @@ class AccountModel(Base):
     created_at = Column(DateTime, default=lambda: datetime.now())
     updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
 
-@asynccontextmanager
-async def get_db():
-    """异步上下文管理器获取数据库会话"""
-    session = async_session_factory()
-    try:
-        await session.execute("SELECT 1")  # 验证连接
-        yield session
-    except Exception as e:
-        logger.error(f"Database connection error: {str(e)}")
-        await session.rollback()
-        raise
-    finally:
-        await session.close()
-
 # 创建数据库会话
 async def get_session() -> AsyncSession:
-    """获取数据库会话的依赖函数"""
-    async with get_db() as session:
-        try:
-            yield session
-        except Exception as e:
-            logger.error(f"Session error: {str(e)}")
-            await session.rollback()
-            raise
+    try:
+        async with async_session() as session:
+            try:
+                # 测试数据库连接
+                await session.execute("SELECT 1")
+                yield session
+            except Exception as e:
+                logger.error(f"Database session error: {str(e)}")
+                raise
+            finally:
+                await session.close()
+    except Exception as e:
+        logger.error(f"Failed to create database session: {str(e)}")
+        raise
 
 # 初始化数据库
 async def init_db():
-    """初始化数据库表结构"""
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database tables created successfully")
+        logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")
         raise 

@@ -14,11 +14,14 @@ import subprocess
 import sys
 import os
 import traceback
-from fastapi import Request
 from fastapi.responses import JSONResponse
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
 # 常量定义
@@ -31,6 +34,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    debug=os.getenv('DEBUG', 'false').lower() == 'true'
 )
 
 # 添加CORS中间件
@@ -111,30 +115,15 @@ async def run_registration():
 async def startup_event():
     """启动时初始化数据库并开始自动注册进程"""
     try:
-        # 在 Vercel 环境中跳过数据库初始化
-        if not os.getenv('VERCEL'):
-            await init_db()
-            logger.info("Database initialized successfully")
-            
-            # 只在非 Vercel 环境启动自动注册任务
-            asyncio.create_task(run_registration())
-            logger.info("Auto registration task started")
+        await init_db()
+        logger.info("Database initialized successfully")
+        
+        # 启动自动注册任务
+        asyncio.create_task(run_registration())
+        logger.info("Auto registration task started")
     except Exception as e:
         logger.error(f"Startup error: {str(e)}")
         raise
-
-@app.middleware("http")
-async def db_session_middleware(request: Request, call_next):
-    """数据库会话中间件"""
-    try:
-        response = await call_next(request)
-        return response
-    except Exception as e:
-        logger.error(f"Request error: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Internal server error"}
-        )
 
 async def import_accounts_from_file():
     """从本地文件导入账号到数据库"""
@@ -217,20 +206,11 @@ async def get_accounts(session: AsyncSession = Depends(get_session)):
         accounts = result.scalars().all()
         
         if not accounts:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No accounts found"
-            )
+            raise HTTPException(status_code=404, detail="No accounts found")
         return accounts
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error fetching accounts: {str(e)}")
-        logger.error(f"Error details: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching accounts"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/account/random", response_model=AccountResponse, tags=["Accounts"])
 async def get_random_account(session: AsyncSession = Depends(get_session)):
@@ -253,26 +233,12 @@ async def get_random_account(session: AsyncSession = Depends(get_session)):
         )
     except Exception as e:
         logger.error(f"Error fetching random account: {str(e)}")
-        logger.error(f"Error details: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while fetching random account"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/account", response_model=AccountResponse, tags=["Accounts"])
 async def create_account(account: Account, session: AsyncSession = Depends(get_session)):
     """创建新账号"""
     try:
-        # 检查账号是否已存在
-        existing = await session.execute(
-            select(AccountModel).where(AccountModel.email == account.email)
-        )
-        if existing.scalar_one_or_none():
-            return AccountResponse(
-                success=False,
-                message=f"Account with email {account.email} already exists"
-            )
-
         db_account = AccountModel(
             email=account.email,
             password=account.password,
@@ -289,10 +255,9 @@ async def create_account(account: Account, session: AsyncSession = Depends(get_s
     except Exception as e:
         await session.rollback()
         logger.error(f"Error creating account: {str(e)}")
-        logger.error(f"Error details: {traceback.format_exc()}")
         return AccountResponse(
             success=False,
-            message="Database error occurred while creating account"
+            message=f"Failed to create account: {str(e)}"
         )
 
 @app.delete("/account/{email}", response_model=AccountResponse, tags=["Accounts"])
@@ -324,10 +289,9 @@ async def delete_account(email: str, session: AsyncSession = Depends(get_session
     except Exception as e:
         await session.rollback()
         logger.error(f"Error deleting account {email}: {str(e)}")
-        logger.error(f"Error details: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while deleting account"
+            detail=f"Failed to delete account: {str(e)}"
         )
 
 @app.get("/registration/status", tags=["Registration"])
@@ -344,6 +308,28 @@ async def get_registration_status(session: AsyncSession = Depends(get_session)):
     except Exception as e:
         logger.error(f"Error getting registration status: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+# 自定义异常处理
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    logger.error(f"HTTP error occurred: {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"success": False, "message": exc.detail}
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    logger.error(f"Unexpected error occurred: {str(exc)}")
+    logger.error(f"Error details: {traceback.format_exc()}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "success": False,
+            "message": "Internal server error occurred",
+            "detail": str(exc) if app.debug else None
+        }
+    )
 
 if __name__ == "__main__":
     uvicorn.run(
