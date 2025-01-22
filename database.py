@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from sqlalchemy import Column, String, DateTime, Text
+from sqlalchemy import Column, String, DateTime, Text, text
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -85,7 +85,7 @@ async def get_session() -> AsyncSession:
         async with async_session() as session:
             try:
                 # 测试数据库连接
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
                 yield session
             except Exception as e:
                 logger.error(f"Database session error: {str(e)}")
