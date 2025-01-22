@@ -200,11 +200,20 @@ async def get_accounts(session: AsyncSession = Depends(get_session)):
         accounts = result.scalars().all()
         
         if not accounts:
-            raise HTTPException(status_code=404, detail="No accounts found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No accounts found"
+            )
         return accounts
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching accounts: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error details: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while fetching accounts"
+        )
 
 @app.get("/account/random", response_model=AccountResponse, tags=["Accounts"])
 async def get_random_account(session: AsyncSession = Depends(get_session)):
@@ -227,12 +236,26 @@ async def get_random_account(session: AsyncSession = Depends(get_session)):
         )
     except Exception as e:
         logger.error(f"Error fetching random account: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error details: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while fetching random account"
+        )
 
 @app.post("/account", response_model=AccountResponse, tags=["Accounts"])
 async def create_account(account: Account, session: AsyncSession = Depends(get_session)):
     """创建新账号"""
     try:
+        # 检查账号是否已存在
+        existing = await session.execute(
+            select(AccountModel).where(AccountModel.email == account.email)
+        )
+        if existing.scalar_one_or_none():
+            return AccountResponse(
+                success=False,
+                message=f"Account with email {account.email} already exists"
+            )
+
         db_account = AccountModel(
             email=account.email,
             password=account.password,
@@ -249,9 +272,10 @@ async def create_account(account: Account, session: AsyncSession = Depends(get_s
     except Exception as e:
         await session.rollback()
         logger.error(f"Error creating account: {str(e)}")
+        logger.error(f"Error details: {traceback.format_exc()}")
         return AccountResponse(
             success=False,
-            message=f"Failed to create account: {str(e)}"
+            message="Database error occurred while creating account"
         )
 
 @app.delete("/account/{email}", response_model=AccountResponse, tags=["Accounts"])
@@ -283,9 +307,10 @@ async def delete_account(email: str, session: AsyncSession = Depends(get_session
     except Exception as e:
         await session.rollback()
         logger.error(f"Error deleting account {email}: {str(e)}")
+        logger.error(f"Error details: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete account: {str(e)}"
+            detail="Database error occurred while deleting account"
         )
 
 @app.get("/registration/status", tags=["Registration"])
