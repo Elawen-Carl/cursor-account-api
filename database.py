@@ -1,10 +1,11 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import Column, String, DateTime, Text, text
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 import logging
+import asyncio
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -46,11 +47,12 @@ try:
             "server_settings": {"client_encoding": "utf8"}
         },
         pool_pre_ping=True,
-        pool_size=20,  # 设置连接池大小
-        max_overflow=10  # 允许的最大连接数超过池大小的数量
+        pool_size=20,
+        max_overflow=10
     )
     
-    async_session = sessionmaker(
+    # 使用 async_sessionmaker 替代 sessionmaker
+    async_session = async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
@@ -82,16 +84,16 @@ class AccountModel(Base):
 # 创建数据库会话
 async def get_session() -> AsyncSession:
     try:
-        async with async_session() as session:
-            try:
-                # 测试数据库连接
-                await session.execute(text("SELECT 1"))
-                yield session
-            except Exception as e:
-                logger.error(f"Database session error: {str(e)}")
-                raise
-            finally:
-                await session.close()
+        session = async_session()
+        try:
+            # 测试数据库连接
+            await session.execute(text("SELECT 1"))
+            yield session
+        except Exception as e:
+            logger.error(f"Database session error: {str(e)}")
+            raise
+        finally:
+            await session.close()
     except Exception as e:
         logger.error(f"Failed to create database session: {str(e)}")
         raise
