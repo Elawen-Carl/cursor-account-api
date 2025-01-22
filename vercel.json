@@ -1,6 +1,5 @@
 {
     "version": 2,
-    "framework": "fastapi",
     "routes": [
         {
             "src": "/(.*)",
