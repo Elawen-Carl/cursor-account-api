@@ -111,40 +111,41 @@ async def get_account_count() -> int:
 async def run_registration():
     """运行注册脚本"""
     global registration_status
-    registration_status["is_running"] = True
-    logger.info("Registration task started running")
-    
-    while True:
-        try:
-            count = await get_account_count()
-            if count >= MAX_ACCOUNTS:
-                logger.info(f"Already have {count} accounts, no need to register more")
-                registration_status["is_running"] = False
-                registration_status["last_status"] = "completed"
-                break
-
-            logger.info(f"Current account count: {count}, starting registration...")
-            registration_status["last_run"] = datetime.now().isoformat()
-            registration_status["total_runs"] += 1
-            
-            # 获取当前工作目录
-            current_dir = Path(__file__).parent.absolute()
-            script_path = current_dir / "cursor_pro_keep_alive.py"
-            
-            if not script_path.exists():
-                logger.error("Registration script not found")
-                registration_status["last_status"] = "error: script not found"
-                registration_status["failed_runs"] += 1
-                await asyncio.sleep(REGISTRATION_INTERVAL)
-                continue
-            
-            # 设置环境变量
-            env = os.environ.copy()
-            env["PYTHONPATH"] = str(current_dir)
-            env["PYTHONIOENCODING"] = "utf-8"
-            
-            # 直接运行脚本，实时显示输出
+    try:
+        registration_status["is_running"] = True
+        registration_status["last_status"] = "running"
+        logger.info("Registration task started running")
+        
+        while registration_status["is_running"]:
             try:
+                count = await get_account_count()
+                if count >= MAX_ACCOUNTS:
+                    logger.info(f"Already have {count} accounts, no need to register more")
+                    registration_status["is_running"] = False
+                    registration_status["last_status"] = "completed"
+                    break
+
+                logger.info(f"Current account count: {count}, starting registration...")
+                registration_status["last_run"] = datetime.now().isoformat()
+                registration_status["total_runs"] += 1
+                
+                # 获取当前工作目录
+                current_dir = Path(__file__).parent.absolute()
+                script_path = current_dir / "cursor_pro_keep_alive.py"
+                
+                if not script_path.exists():
+                    error_msg = "Registration script not found"
+                    logger.error(error_msg)
+                    registration_status["last_status"] = f"error: {error_msg}"
+                    registration_status["failed_runs"] += 1
+                    raise FileNotFoundError(error_msg)
+                
+                # 设置环境变量
+                env = os.environ.copy()
+                env["PYTHONPATH"] = str(current_dir)
+                env["PYTHONIOENCODING"] = "utf-8"
+                
+                # 运行脚本并实时获取输出
                 process = await asyncio.create_subprocess_exec(
                     sys.executable,
                     str(script_path),
@@ -166,27 +167,33 @@ async def run_registration():
                     registration_status["last_status"] = f"failed: {error_msg}"
                     logger.error(f"Registration failed: {error_msg}")
                     
+                # 更新下次运行时间
+                next_run = datetime.now().timestamp() + REGISTRATION_INTERVAL
+                registration_status["next_run"] = next_run
+                
+                logger.info(f"Waiting {REGISTRATION_INTERVAL} seconds before next attempt...")
+                await asyncio.sleep(REGISTRATION_INTERVAL)
+                
+            except asyncio.CancelledError:
+                logger.info("Registration task cancelled")
+                registration_status["is_running"] = False
+                registration_status["last_status"] = "cancelled"
+                raise
             except Exception as e:
                 registration_status["failed_runs"] += 1
                 registration_status["last_status"] = f"error: {str(e)}"
-                logger.error(f"Error running registration script: {str(e)}")
-            
-            # 更新下次运行时间
-            next_run = datetime.now().timestamp() + REGISTRATION_INTERVAL
-            registration_status["next_run"] = datetime.fromtimestamp(next_run).isoformat()
-            
-            logger.info(f"Waiting {REGISTRATION_INTERVAL} seconds before next attempt...")
-            await asyncio.sleep(REGISTRATION_INTERVAL)
-        except asyncio.CancelledError:
-            logger.info("Registration task cancelled")
-            registration_status["is_running"] = False
-            registration_status["last_status"] = "cancelled"
-            break
-        except Exception as e:
-            registration_status["failed_runs"] += 1
-            registration_status["last_status"] = f"error: {str(e)}"
-            logger.error(f"Error in registration process: {str(e)}")
-            await asyncio.sleep(REGISTRATION_INTERVAL)
+                logger.error(f"Error in registration process: {str(e)}")
+                logger.error(traceback.format_exc())
+                await asyncio.sleep(REGISTRATION_INTERVAL)
+                
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.error(f"Fatal error in registration task: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise
+    finally:
+        registration_status["is_running"] = False
 
 @app.get("/", tags=["General"])
 async def root():
@@ -362,24 +369,60 @@ async def delete_account(email: str):
 @app.post("/registration/start", tags=["Registration"])
 async def start_registration():
     """手动启动注册任务"""
-    global background_tasks
+    global background_tasks, registration_status
     try:
+        # 检查是否已达到最大账号数
+        count = await get_account_count()
+        if count >= MAX_ACCOUNTS:
+            return {
+                "success": False,
+                "message": f"Already have maximum number of accounts ({MAX_ACCOUNTS})"
+            }
+
+        # 如果任务已在运行，返回相应消息
         if background_tasks["registration_task"] and not background_tasks["registration_task"].done():
             return {
                 "success": False,
                 "message": "Registration task is already running"
             }
         
+        # 重置注册状态
+        registration_status["is_running"] = True
+        registration_status["last_status"] = "starting"
+        registration_status["last_run"] = datetime.now().isoformat()
+        registration_status["next_run"] = (datetime.now().timestamp() + REGISTRATION_INTERVAL)
+        
+        # 创建并启动新任务
         loop = asyncio.get_running_loop()
         background_tasks["registration_task"] = loop.create_task(run_registration())
+        
+        # 添加任务完成回调
+        def task_done_callback(task):
+            try:
+                task.result()
+            except asyncio.CancelledError:
+                logger.info("Registration task was cancelled")
+            except Exception as e:
+                logger.error(f"Registration task failed with error: {str(e)}")
+            finally:
+                registration_status["is_running"] = False
+        
+        background_tasks["registration_task"].add_done_callback(task_done_callback)
         logger.info("Registration task manually started")
         
         return {
             "success": True,
-            "message": "Registration task started successfully"
+            "message": "Registration task started successfully",
+            "status": {
+                "is_running": registration_status["is_running"],
+                "last_run": registration_status["last_run"],
+                "next_run": datetime.fromtimestamp(registration_status["next_run"]).isoformat()
+            }
         }
     except Exception as e:
         logger.error(f"Error starting registration task: {str(e)}")
+        registration_status["is_running"] = False
+        registration_status["last_status"] = f"error: {str(e)}"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start registration task: {str(e)}"
