@@ -113,7 +113,6 @@ async def run_registration():
     global registration_status
     try:
         logger.info("Registration task started running")
-        registration_status["last_status"] = "running"
         
         while registration_status["is_running"]:
             try:
@@ -164,36 +163,33 @@ async def run_registration():
                     error_msg = stderr.decode() if stderr else f"failed with code {process.returncode}"
                     registration_status["last_status"] = f"failed: {error_msg}"
                     logger.error(f"Registration failed: {error_msg}")
-                    
+                
                 # 更新下次运行时间
-                registration_status["next_run"] = datetime.now().timestamp() + REGISTRATION_INTERVAL
+                next_run = datetime.now().timestamp() + REGISTRATION_INTERVAL
+                registration_status["next_run"] = next_run
                 
                 logger.info(f"Waiting {REGISTRATION_INTERVAL} seconds before next attempt...")
                 await asyncio.sleep(REGISTRATION_INTERVAL)
                 
             except asyncio.CancelledError:
-                logger.info("Registration task iteration cancelled")
-                registration_status["last_status"] = "cancelled"
+                logger.info("Registration iteration cancelled")
                 raise
             except Exception as e:
                 registration_status["failed_runs"] += 1
                 registration_status["last_status"] = f"error: {str(e)}"
                 logger.error(f"Error in registration process: {str(e)}")
                 logger.error(traceback.format_exc())
+                # 如果发生错误，等待一段时间后继续
                 await asyncio.sleep(REGISTRATION_INTERVAL)
-                
     except asyncio.CancelledError:
         logger.info("Registration task cancelled")
-        registration_status["last_status"] = "cancelled"
         raise
     except Exception as e:
         logger.error(f"Fatal error in registration task: {str(e)}")
         logger.error(traceback.format_exc())
-        registration_status["last_status"] = f"error: {str(e)}"
         raise
     finally:
-        if registration_status["last_status"] not in ["running", "starting"]:
-            registration_status["is_running"] = False
+        registration_status["is_running"] = False
 
 @app.get("/", tags=["General"])
 async def root():
@@ -399,23 +395,25 @@ async def start_registration():
         
         # 创建并启动新任务
         loop = asyncio.get_running_loop()
-        background_tasks["registration_task"] = loop.create_task(run_registration())
+        task = loop.create_task(run_registration())
+        background_tasks["registration_task"] = task
         
         # 添加任务完成回调
         def task_done_callback(task):
             try:
-                task.result()
+                task.result()  # 这将重新引发任何未处理的异常
             except asyncio.CancelledError:
                 logger.info("Registration task was cancelled")
                 registration_status["last_status"] = "cancelled"
             except Exception as e:
                 logger.error(f"Registration task failed with error: {str(e)}")
                 registration_status["last_status"] = f"error: {str(e)}"
+                logger.error(traceback.format_exc())
             finally:
-                if registration_status["last_status"] not in ["running", "starting"]:
+                if registration_status["is_running"]:  # 只有在任务仍在运行时才更新状态
                     registration_status["is_running"] = False
         
-        background_tasks["registration_task"].add_done_callback(task_done_callback)
+        task.add_done_callback(task_done_callback)
         logger.info("Registration task manually started")
         
         return {
@@ -424,11 +422,13 @@ async def start_registration():
             "status": {
                 "is_running": registration_status["is_running"],
                 "last_run": registration_status["last_run"],
-                "next_run": datetime.fromtimestamp(registration_status["next_run"]).isoformat()
+                "next_run": datetime.fromtimestamp(registration_status["next_run"]).isoformat(),
+                "last_status": registration_status["last_status"]
             }
         }
     except Exception as e:
         logger.error(f"Error starting registration task: {str(e)}")
+        logger.error(traceback.format_exc())
         registration_status["is_running"] = False
         registration_status["last_status"] = f"error: {str(e)}"
         raise HTTPException(
