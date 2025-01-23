@@ -6,14 +6,24 @@ from pathlib import Path
 
 def setup_logger():
     """设置日志记录器"""
-    logger = logging.getLogger("cursor_api")
-    logger.setLevel(logging.INFO)
-    
-    # 创建格式化器
-    formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+    # 配置根日志记录器
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.INFO,
+        force=True  # 强制所有处理器使用这个格式
     )
+    
+    # 获取根日志记录器
+    root_logger = logging.getLogger()
+    
+    # 移除所有现有的处理器
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # 创建我们的日志记录器
+    logger = logging.getLogger("cursor_api")
+    logger.propagate = False  # 防止日志传播到父记录器
     
     # 在非 Vercel 环境中使用文件处理器
     if not os.environ.get("VERCEL"):
@@ -23,21 +33,25 @@ def setup_logger():
             
             log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
             file_handler = logging.FileHandler(log_file, encoding="utf-8")
-            file_handler.setFormatter(formatter)
+            file_handler.setFormatter(logging.Formatter(
+                "%(asctime)s - %(levelname)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S"
+            ))
             logger.addHandler(file_handler)
         except OSError:
-            # 如果无法创建文件处理器，使用标准输出
-            stream_handler = logging.StreamHandler(sys.stdout)
-            stream_handler.setFormatter(formatter)
-            logger.addHandler(stream_handler)
-    else:
-        # 在 Vercel 环境中使用标准输出
-        stream_handler = logging.StreamHandler(sys.stdout)
-        stream_handler.setFormatter(formatter)
-        logger.addHandler(stream_handler)
+            pass
+    
+    # 总是添加标准输出处理器
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+    logger.addHandler(stream_handler)
     
     return logger
 
+# 创建全局logger实例
 logger = setup_logger()
 
 def info(message):

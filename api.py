@@ -127,11 +127,7 @@ async def run_registration():
     try:
         info("注册任务开始运行")
         
-        while True:  # 改为无限循环，由 is_running 状态控制
-            if not registration_status["is_running"]:
-                info("注册任务被状态标志停止")
-                break
-                
+        while registration_status["is_running"]:
             try:
                 count = await get_account_count()
                 if count >= MAX_ACCOUNTS:
@@ -149,7 +145,7 @@ async def run_registration():
                     browser_manager = BrowserManager()
                 
                 # 调用注册函数
-                success = register_account()
+                success = await asyncio.get_event_loop().run_in_executor(None, register_account)
                 
                 if success:
                     registration_status["successful_runs"] += 1
@@ -169,7 +165,6 @@ async def run_registration():
                 
             except asyncio.CancelledError:
                 info("注册迭代被取消")
-                registration_status["is_running"] = False
                 raise
             except Exception as e:
                 registration_status["failed_runs"] += 1
@@ -423,11 +418,29 @@ async def start_registration():
                 error(traceback.format_exc())
                 registration_status["last_status"] = "error"
             finally:
-                registration_status["is_running"] = False
+                if registration_status["is_running"]:  # 只有在任务仍在运行时才更新状态
+                    registration_status["is_running"] = False
                 background_tasks["registration_task"] = None
         
         task.add_done_callback(task_done_callback)
         info("手动启动注册任务")
+        
+        # 等待任务实际开始运行
+        await asyncio.sleep(1)
+        
+        # 检查任务是否成功启动
+        if task.done():
+            try:
+                task.result()  # 如果任务已完成，检查是否有异常
+            except Exception as e:
+                error(f"注册任务启动失败: {str(e)}")
+                error(traceback.format_exc())
+                registration_status["is_running"] = False
+                registration_status["last_status"] = "error"
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to start registration task: {str(e)}"
+                )
         
         return {
             "success": True,
