@@ -28,39 +28,24 @@ class BrowserManager:
                 co.set_argument('--ignore-certificate-errors')
                 co.set_argument('--remote-debugging-port=9222')
                 
-                # 设置 Chrome 路径（Vercel 环境中的路径）
-                chrome_paths = [
-                    '/opt/google/chrome/chrome',  # Vercel 标准路径
-                    '/usr/bin/google-chrome',     # 备选路径 1
-                    '/usr/bin/chromium',          # 备选路径 2
-                    '/usr/bin/chromium-browser'   # 备选路径 3
-                ]
-                
-                chrome_found = False
-                for chrome_path in chrome_paths:
-                    if os.path.exists(chrome_path):
-                        info(f"找到Chrome: {chrome_path}")
-                        co.set_browser_path(chrome_path)
-                        chrome_found = True
-                        break
-                
-                if not chrome_found:
-                    error("未找到可用的Chrome浏览器")
-                    # 尝试安装 Chrome
-                    try:
-                        info("尝试安装Chrome...")
-                        os.system("apt-get update && apt-get install -y chromium-browser")
-                        if os.path.exists('/usr/bin/chromium-browser'):
-                            info("Chrome安装成功")
-                            co.set_browser_path('/usr/bin/chromium-browser')
-                            chrome_found = True
-                    except Exception as e:
-                        error(f"Chrome安装失败: {str(e)}")
-                        return None
-                    
-                if not chrome_found:
-                    error("无法找到或安装Chrome浏览器")
+                try:
+                    # 尝试使用 playwright 的 chromium
+                    from playwright.sync_api import sync_playwright
+                    with sync_playwright() as p:
+                        browser_path = p.chromium.executable_path
+                        if os.path.exists(browser_path):
+                            info(f"使用 Playwright Chromium: {browser_path}")
+                            co.set_browser_path(browser_path)
+                        else:
+                            error("Playwright Chromium 不可用")
+                            return None
+                except ImportError:
+                    error("Playwright 未安装，请先安装: pip install playwright")
                     return None
+                except Exception as e:
+                    error(f"获取 Playwright Chromium 失败: {str(e)}")
+                    return None
+                
             else:
                 info("本地环境，使用默认配置")
                 co = ChromiumOptions()
