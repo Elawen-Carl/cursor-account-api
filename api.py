@@ -28,6 +28,17 @@ logger = logging.getLogger(__name__)
 MAX_ACCOUNTS = 50
 REGISTRATION_INTERVAL = 60  # 每次注册间隔60秒
 
+# 全局状态追踪
+registration_status = {
+    "is_running": False,
+    "last_run": None,
+    "last_status": None,
+    "next_run": None,
+    "total_runs": 0,
+    "successful_runs": 0,
+    "failed_runs": 0
+}
+
 app = FastAPI(
     title="Cursor Account API",
     description="API for managing Cursor accounts",
@@ -84,15 +95,22 @@ async def get_account_count() -> int:
 
 async def run_registration():
     """运行注册脚本"""
+    global registration_status
+    registration_status["is_running"] = True
+    
     while True:
         try:
             async with get_session() as session:
                 count = await get_account_count()
                 if count >= MAX_ACCOUNTS:
                     logger.info(f"Already have {count} accounts, no need to register more")
+                    registration_status["is_running"] = False
+                    registration_status["last_status"] = "completed"
                     break
 
                 logger.info(f"Current account count: {count}, starting registration...")
+                registration_status["last_run"] = datetime.now().isoformat()
+                registration_status["total_runs"] += 1
                 
                 # 获取当前工作目录
                 current_dir = Path(__file__).parent.absolute()
@@ -114,15 +132,28 @@ async def run_registration():
                         )
                     )
                     
-                    if process.returncode != 0:
+                    if process.returncode == 0:
+                        registration_status["successful_runs"] += 1
+                        registration_status["last_status"] = "success"
+                    else:
+                        registration_status["failed_runs"] += 1
+                        registration_status["last_status"] = f"failed with code {process.returncode}"
                         logger.error(f"Registration failed with code {process.returncode}")
                         
                 except Exception as e:
+                    registration_status["failed_runs"] += 1
+                    registration_status["last_status"] = f"error: {str(e)}"
                     logger.error(f"Error running registration script: {str(e)}")
+                
+                # 更新下次运行时间
+                next_run = datetime.now().timestamp() + REGISTRATION_INTERVAL
+                registration_status["next_run"] = datetime.fromtimestamp(next_run).isoformat()
                 
                 logger.info(f"Waiting {REGISTRATION_INTERVAL} seconds before next attempt...")
                 await asyncio.sleep(REGISTRATION_INTERVAL)
         except Exception as e:
+            registration_status["failed_runs"] += 1
+            registration_status["last_status"] = f"error: {str(e)}"
             logger.error(f"Error in registration process: {str(e)}")
             await asyncio.sleep(REGISTRATION_INTERVAL)
 
@@ -145,6 +176,18 @@ async def root():
                 "max_accounts": MAX_ACCOUNTS,
                 "remaining_slots": MAX_ACCOUNTS - account_count,
                 "registration_interval": f"{REGISTRATION_INTERVAL} seconds"
+            },
+            "registration_status": {
+                "is_running": registration_status["is_running"],
+                "last_run": registration_status["last_run"],
+                "last_status": registration_status["last_status"],
+                "next_run": registration_status["next_run"],
+                "statistics": {
+                    "total_runs": registration_status["total_runs"],
+                    "successful_runs": registration_status["successful_runs"],
+                    "failed_runs": registration_status["failed_runs"],
+                    "success_rate": f"{(registration_status['successful_runs'] / registration_status['total_runs'] * 100):.1f}%" if registration_status['total_runs'] > 0 else "N/A"
+                }
             },
             "endpoints": {
                 "documentation": {
