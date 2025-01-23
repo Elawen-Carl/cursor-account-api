@@ -38,23 +38,30 @@ def get_database_url():
 def ensure_event_loop():
     """确保有可用的事件循环，如果没有则创建一个新的"""
     try:
-        loop = asyncio.get_running_loop()
-        if loop.is_closed():
+        # 尝试获取当前事件循环
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        
+        # 如果没有事件循环或事件循环已关闭，创建新的
+        if loop is None or loop.is_closed():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-    except RuntimeError:
+            
+        return loop
+    except Exception as e:
+        logger.error(f"Error ensuring event loop: {str(e)}")
+        # 如果出现任何错误，强制创建新的事件循环
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    return loop
+        return loop
 
 def create_engine_and_session():
     """创建数据库引擎和会话工厂"""
     try:
         # 获取数据库URL
         POSTGRES_URL = get_database_url()
-        
-        # 确保有可用的事件循环
-        ensure_event_loop()
         
         # 创建异步引擎，优化连接池配置
         engine = create_async_engine(
@@ -69,14 +76,17 @@ def create_engine_and_session():
             pool_size=1,  # Serverless环境建议使用较小的连接池
             max_overflow=0,
             pool_timeout=30,
-            pool_recycle=1800
+            pool_recycle=1800,
+            pool_use_lifo=True,  # 使用后进先出策略
+            future=True  # 使用新的 future 特性
         )
         
         # 创建会话工厂
         session_maker = async_sessionmaker(
             engine,
             class_=AsyncSession,
-            expire_on_commit=False
+            expire_on_commit=False,
+            future=True
         )
         
         return engine, session_maker
@@ -107,8 +117,9 @@ class AccountModel(Base):
 async def get_session() -> AsyncSession:
     """创建数据库会话的异步上下文管理器"""
     # 确保有可用的事件循环
-    ensure_event_loop()
+    loop = ensure_event_loop()
     
+    # 创建新的会话
     session = async_session()
     try:
         # 确保连接有效
@@ -126,13 +137,19 @@ async def get_session() -> AsyncSession:
             await session.close()
         except Exception as e:
             logger.error(f"Error closing session: {str(e)}")
+            # 如果关闭会话时出错，尝试重置事件循环
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            except Exception as loop_error:
+                logger.error(f"Error resetting event loop: {str(loop_error)}")
 
 # 初始化数据库
 async def init_db():
     """初始化数据库表结构"""
     try:
         # 确保有可用的事件循环
-        ensure_event_loop()
+        loop = ensure_event_loop()
         
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

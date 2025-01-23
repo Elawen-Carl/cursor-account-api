@@ -48,10 +48,22 @@ app.add_middleware(
 
 @app.middleware("http")
 async def db_session_middleware(request, call_next):
-    """确保每个请求都有可用的事件循环"""
-    ensure_event_loop()
-    response = await call_next(request)
-    return response
+    """确保每个请求都有可用的事件循环，并在请求结束时正确清理"""
+    loop = ensure_event_loop()
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Error in request: {str(e)}")
+        raise
+    finally:
+        # 如果事件循环已关闭，创建新的
+        if loop.is_closed():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            except Exception as e:
+                logger.error(f"Error resetting event loop in middleware: {str(e)}")
 
 class Account(BaseModel):
     email: str
@@ -123,12 +135,12 @@ async def run_registration():
 async def startup_event():
     """启动时初始化数据库并开始自动注册进程"""
     try:
-        ensure_event_loop()
+        loop = ensure_event_loop()
         await init_db()
         logger.info("Database initialized successfully")
         
         # 启动自动注册任务
-        asyncio.create_task(run_registration())
+        task = loop.create_task(run_registration())
         logger.info("Auto registration task started")
     except Exception as e:
         logger.error(f"Startup error: {str(e)}")
@@ -140,6 +152,15 @@ async def shutdown_event():
     try:
         await engine.dispose()
         logger.info("Database connections closed")
+        
+        # 尝试关闭当前事件循环
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_closed():
+                loop.close()
+        except Exception as e:
+            logger.error(f"Error closing event loop: {str(e)}")
+            
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}")
 
