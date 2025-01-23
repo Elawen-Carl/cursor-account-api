@@ -129,17 +129,58 @@ async def run_registration():
 @app.get("/", tags=["General"])
 async def root():
     """API根路径，返回API信息"""
-    return {
-        "message": "Welcome to Cursor Account API",
-        "version": "1.0.0",
-        "status": "running",
-        "endpoints": {
-            "docs": "/docs",
-            "redoc": "/redoc",
-            "accounts": "/accounts",
-            "random_account": "/account/random"
+    try:
+        # 获取当前账号数量
+        account_count = await get_account_count()
+        
+        return {
+            "service": {
+                "name": "Cursor Account API",
+                "version": "1.0.0",
+                "status": "running",
+                "description": "API for managing Cursor Pro accounts and automatic registration"
+            },
+            "statistics": {
+                "total_accounts": account_count,
+                "max_accounts": MAX_ACCOUNTS,
+                "remaining_slots": MAX_ACCOUNTS - account_count,
+                "registration_interval": f"{REGISTRATION_INTERVAL} seconds"
+            },
+            "endpoints": {
+                "documentation": {
+                    "swagger": "/docs",
+                    "redoc": "/redoc"
+                },
+                "health": {
+                    "check": "/health",
+                    "registration_status": "/registration/status"
+                },
+                "accounts": {
+                    "list_all": "/accounts",
+                    "random": "/account/random",
+                    "create": {
+                        "path": "/account",
+                        "method": "POST"
+                    },
+                    "delete": {
+                        "path": "/account/{email}",
+                        "method": "DELETE"
+                    }
+                }
+            },
+            "support": {
+                "github": "https://github.com/Elawen-Carl/cursor-account-api",
+                "author": "Elawen Carl",
+                "contact": "elawencarl@gmail.com"
+            },
+            "timestamp": datetime.now().isoformat()
         }
-    }
+    except Exception as e:
+        logger.error(f"Error in root endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error fetching API information"
+        )
 
 @app.get("/health", tags=["General"])
 async def health_check():
