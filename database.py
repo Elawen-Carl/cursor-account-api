@@ -5,7 +5,6 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import logging
-import asyncio
 from contextlib import asynccontextmanager
 
 # 配置日志
@@ -35,68 +34,21 @@ def get_database_url():
     logger.info(f"Database configuration loaded successfully")
     return url
 
-def ensure_event_loop():
-    """确保有可用的事件循环，如果没有则创建一个新的"""
-    try:
-        # 尝试获取当前事件循环
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        
-        # 如果没有事件循环或事件循环已关闭，创建新的
-        if loop is None or loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-        return loop
-    except Exception as e:
-        logger.error(f"Error ensuring event loop: {str(e)}")
-        # 如果出现任何错误，强制创建新的事件循环
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
-
-def create_engine_and_session():
-    """创建数据库引擎和会话工厂"""
-    try:
-        # 获取数据库URL
-        POSTGRES_URL = get_database_url()
-        
-        # 创建异步引擎，优化连接池配置
-        engine = create_async_engine(
-            POSTGRES_URL,
-            echo=False,
-            connect_args={
-                "ssl": True,
-                "server_settings": {"client_encoding": "utf8"},
-                "command_timeout": 10
-            },
-            pool_pre_ping=True,
-            pool_size=1,  # Serverless环境建议使用较小的连接池
-            max_overflow=0,
-            pool_timeout=30,
-            pool_recycle=1800,
-            pool_use_lifo=True,  # 使用后进先出策略
-            future=True  # 使用新的 future 特性
-        )
-        
-        # 创建会话工厂
-        session_maker = async_sessionmaker(
-            engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-            future=True
-        )
-        
-        return engine, session_maker
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {str(e)}")
-        raise
-
-# 创建全局引擎和会话工厂
-engine, async_session = create_engine_and_session()
+def create_engine():
+    """创建数据库引擎"""
+    POSTGRES_URL = get_database_url()
+    return create_async_engine(
+        POSTGRES_URL,
+        echo=False,
+        connect_args={
+            "ssl": True,
+            "server_settings": {"client_encoding": "utf8"},
+            "command_timeout": 10
+        },
+        pool_pre_ping=True,
+        poolclass=None,  # 禁用连接池
+        future=True
+    )
 
 # 基础模型类
 class Base(DeclarativeBase):
@@ -116,10 +68,15 @@ class AccountModel(Base):
 @asynccontextmanager
 async def get_session() -> AsyncSession:
     """创建数据库会话的异步上下文管理器"""
-    # 确保有可用的事件循环
-    loop = ensure_event_loop()
+    # 为每个请求创建新的引擎和会话
+    engine = create_engine()
+    async_session = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        future=True
+    )
     
-    # 创建新的会话
     session = async_session()
     try:
         # 确保连接有效
@@ -137,22 +94,19 @@ async def get_session() -> AsyncSession:
             await session.close()
         except Exception as e:
             logger.error(f"Error closing session: {str(e)}")
-            # 如果关闭会话时出错，尝试重置事件循环
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            except Exception as loop_error:
-                logger.error(f"Error resetting event loop: {str(loop_error)}")
+        try:
+            await engine.dispose()
+        except Exception as e:
+            logger.error(f"Error disposing engine: {str(e)}")
 
 # 初始化数据库
 async def init_db():
     """初始化数据库表结构"""
     try:
-        # 确保有可用的事件循环
-        loop = ensure_event_loop()
-        
+        engine = create_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        await engine.dispose()
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")

@@ -4,7 +4,7 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from pathlib import Path
-from database import get_session, AccountModel, init_db, async_session, engine, ensure_event_loop
+from database import get_session, AccountModel, init_db
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
@@ -46,24 +46,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def db_session_middleware(request, call_next):
-    """确保每个请求都有可用的事件循环，并在请求结束时正确清理"""
-    loop = ensure_event_loop()
+@app.on_event("startup")
+async def startup_event():
+    """启动时初始化数据库并开始自动注册进程"""
     try:
-        response = await call_next(request)
-        return response
+        await init_db()
+        logger.info("Database initialized successfully")
+        
+        # 启动自动注册任务
+        asyncio.create_task(run_registration())
+        logger.info("Auto registration task started")
     except Exception as e:
-        logger.error(f"Error in request: {str(e)}")
+        logger.error(f"Startup error: {str(e)}")
         raise
-    finally:
-        # 如果事件循环已关闭，创建新的
-        if loop.is_closed():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            except Exception as e:
-                logger.error(f"Error resetting event loop in middleware: {str(e)}")
 
 class Account(BaseModel):
     email: str
@@ -130,92 +125,6 @@ async def run_registration():
         except Exception as e:
             logger.error(f"Error in registration process: {str(e)}")
             await asyncio.sleep(REGISTRATION_INTERVAL)
-
-@app.on_event("startup")
-async def startup_event():
-    """启动时初始化数据库并开始自动注册进程"""
-    try:
-        loop = ensure_event_loop()
-        await init_db()
-        logger.info("Database initialized successfully")
-        
-        # 启动自动注册任务
-        task = loop.create_task(run_registration())
-        logger.info("Auto registration task started")
-    except Exception as e:
-        logger.error(f"Startup error: {str(e)}")
-        raise
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """关闭时清理资源"""
-    try:
-        await engine.dispose()
-        logger.info("Database connections closed")
-        
-        # 尝试关闭当前事件循环
-        try:
-            loop = asyncio.get_event_loop()
-            if not loop.is_closed():
-                loop.close()
-        except Exception as e:
-            logger.error(f"Error closing event loop: {str(e)}")
-            
-    except Exception as e:
-        logger.error(f"Shutdown error: {str(e)}")
-
-async def import_accounts_from_file():
-    """从本地文件导入账号到数据库"""
-    account_file = Path("cursor_accounts.txt")
-    if not account_file.exists():
-        return
-    
-    try:
-        async with async_session() as session:
-            with open(account_file, "r", encoding="utf-8") as f:
-                current_account = {}
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("Email:"):
-                        current_account["email"] = line.replace("Email:", "").strip()
-                    elif line.startswith("Password:"):
-                        current_account["password"] = line.replace("Password:", "").strip()
-                    elif line.startswith("Token:"):
-                        current_account["token"] = line.replace("Token:", "").strip()
-                    elif line.startswith("Usage Limit:"):
-                        current_account["usage_limit"] = line.replace("Usage Limit:", "").strip()
-                    elif line.startswith("="):
-                        if "email" in current_account and "token" in current_account:
-                            try:
-                                # 检查账号是否已存在
-                                result = await session.execute(
-                                    select(AccountModel).where(AccountModel.email == current_account["email"])
-                                )
-                                existing_account = result.scalar_one_or_none()
-                                
-                                if existing_account:
-                                    # 更新现有账号
-                                    existing_account.token = current_account["token"]
-                                    if "password" in current_account:
-                                        existing_account.password = current_account["password"]
-                                    if "usage_limit" in current_account:
-                                        existing_account.usage_limit = current_account["usage_limit"]
-                                else:
-                                    # 创建新账号
-                                    account = AccountModel(
-                                        email=current_account["email"],
-                                        password=current_account.get("password"),
-                                        token=current_account["token"],
-                                        usage_limit=current_account.get("usage_limit")
-                                    )
-                                    session.add(account)
-                            except Exception as e:
-                                print(f"Error processing account {current_account['email']}: {str(e)}")
-                            current_account = {}
-            await session.commit()
-            print("Account import completed successfully")
-    except Exception as e:
-        print(f"Error importing accounts: {str(e)}")
 
 @app.get("/", tags=["General"])
 async def root():
