@@ -62,17 +62,18 @@ class AccountResponse(BaseModel):
     data: Optional[Account] = None
     message: str = ""
 
-async def get_account_count(session: AsyncSession) -> int:
+async def get_account_count() -> int:
     """获取当前账号总数"""
-    result = await session.execute(select(func.count()).select_from(AccountModel))
-    return result.scalar()
+    async with get_session() as session:
+        result = await session.execute(select(func.count()).select_from(AccountModel))
+        return result.scalar()
 
 async def run_registration():
     """运行注册脚本"""
     while True:
         try:
-            async with async_session() as session:
-                count = await get_account_count(session)
+            async with get_session() as session:
+                count = await get_account_count()
                 if count >= MAX_ACCOUNTS:
                     logger.info(f"Already have {count} accounts, no need to register more")
                     break
@@ -199,61 +200,63 @@ async def health_check():
     return {"status": "healthy"}
 
 @app.get("/accounts", response_model=List[Account], tags=["Accounts"])
-async def get_accounts(session: AsyncSession = Depends(get_session)):
+async def get_accounts():
     """获取所有可用的账号和token"""
     try:
-        result = await session.execute(select(AccountModel))
-        accounts = result.scalars().all()
-        
-        if not accounts:
-            raise HTTPException(status_code=404, detail="No accounts found")
-        return accounts
+        async with get_session() as session:
+            result = await session.execute(select(AccountModel))
+            accounts = result.scalars().all()
+            
+            if not accounts:
+                raise HTTPException(status_code=404, detail="No accounts found")
+            return accounts
     except Exception as e:
         logger.error(f"Error fetching accounts: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/account/random", response_model=AccountResponse, tags=["Accounts"])
-async def get_random_account(session: AsyncSession = Depends(get_session)):
+async def get_random_account():
     """随机获取一个可用的账号和token"""
     try:
-        result = await session.execute(
-            select(AccountModel).order_by(func.random()).limit(1)
-        )
-        account = result.scalar_one_or_none()
-        
-        if not account:
-            return AccountResponse(
-                success=False,
-                message="No accounts available"
+        async with get_session() as session:
+            result = await session.execute(
+                select(AccountModel).order_by(func.random()).limit(1)
             )
-        
-        return AccountResponse(
-            success=True,
-            data=Account.from_orm(account)
-        )
+            account = result.scalar_one_or_none()
+            
+            if not account:
+                return AccountResponse(
+                    success=False,
+                    message="No accounts available"
+                )
+            
+            return AccountResponse(
+                success=True,
+                data=Account.from_orm(account)
+            )
     except Exception as e:
         logger.error(f"Error fetching random account: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/account", response_model=AccountResponse, tags=["Accounts"])
-async def create_account(account: Account, session: AsyncSession = Depends(get_session)):
+async def create_account(account: Account):
     """创建新账号"""
     try:
-        db_account = AccountModel(
-            email=account.email,
-            password=account.password,
-            token=account.token,
-            usage_limit=account.usage_limit
-        )
-        session.add(db_account)
-        await session.commit()
-        return AccountResponse(
-            success=True,
-            data=account,
-            message="Account created successfully"
-        )
+        async with get_session() as session:
+            db_account = AccountModel(
+                email=account.email,
+                password=account.password,
+                token=account.token,
+                usage_limit=account.usage_limit
+            )
+            session.add(db_account)
+            await session.commit()
+            return AccountResponse(
+                success=True,
+                data=account,
+                message="Account created successfully"
+            )
     except Exception as e:
-        await session.rollback()
         logger.error(f"Error creating account: {str(e)}")
         return AccountResponse(
             success=False,
@@ -261,33 +264,33 @@ async def create_account(account: Account, session: AsyncSession = Depends(get_s
         )
 
 @app.delete("/account/{email}", response_model=AccountResponse, tags=["Accounts"])
-async def delete_account(email: str, session: AsyncSession = Depends(get_session)):
+async def delete_account(email: str):
     """删除指定邮箱的账号"""
     try:
-        # 先检查账号是否存在
-        result = await session.execute(
-            select(AccountModel).where(AccountModel.email == email)
-        )
-        account = result.scalar_one_or_none()
-        
-        if not account:
-            return AccountResponse(
-                success=False,
-                message=f"Account with email {email} not found"
+        async with get_session() as session:
+            # 先检查账号是否存在
+            result = await session.execute(
+                select(AccountModel).where(AccountModel.email == email)
             )
-        
-        # 删除账号
-        await session.execute(
-            delete(AccountModel).where(AccountModel.email == email)
-        )
-        await session.commit()
-        
-        return AccountResponse(
-            success=True,
-            message=f"Account {email} deleted successfully"
-        )
+            account = result.scalar_one_or_none()
+            
+            if not account:
+                return AccountResponse(
+                    success=False,
+                    message=f"Account with email {email} not found"
+                )
+            
+            # 删除账号
+            await session.execute(
+                delete(AccountModel).where(AccountModel.email == email)
+            )
+            await session.commit()
+            
+            return AccountResponse(
+                success=True,
+                message=f"Account {email} deleted successfully"
+            )
     except Exception as e:
-        await session.rollback()
         logger.error(f"Error deleting account {email}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -295,16 +298,17 @@ async def delete_account(email: str, session: AsyncSession = Depends(get_session
         )
 
 @app.get("/registration/status", tags=["Registration"])
-async def get_registration_status(session: AsyncSession = Depends(get_session)):
+async def get_registration_status():
     """获取注册状态"""
     try:
-        count = await get_account_count(session)
-        return {
-            "current_count": count,
-            "max_accounts": MAX_ACCOUNTS,
-            "is_registration_active": count < MAX_ACCOUNTS,
-            "remaining_slots": MAX_ACCOUNTS - count
-        }
+        async with get_session() as session:
+            count = await get_account_count()
+            return {
+                "current_count": count,
+                "max_accounts": MAX_ACCOUNTS,
+                "is_registration_active": count < MAX_ACCOUNTS,
+                "remaining_slots": MAX_ACCOUNTS - count
+            }
     except Exception as e:
         logger.error(f"Error getting registration status: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
