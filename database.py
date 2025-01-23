@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import logging
-import asyncio
+from contextlib import asynccontextmanager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -38,26 +38,27 @@ try:
     # 获取数据库URL
     POSTGRES_URL = get_database_url()
     
-    # 创建异步引擎
+    # 创建异步引擎，优化连接池配置
     engine = create_async_engine(
         POSTGRES_URL,
         echo=False,
         connect_args={
             "ssl": True,
-            "server_settings": {"client_encoding": "utf8"}
+            "server_settings": {"client_encoding": "utf8"},
+            "command_timeout": 10  # 添加命令超时
         },
         pool_pre_ping=True,
-        pool_size=20,
-        max_overflow=10
+        pool_size=5,  # 减小连接池大小
+        max_overflow=10,
+        pool_timeout=30,  # 添加池超时
+        pool_recycle=1800  # 30分钟后回收连接
     )
     
     # 使用 async_sessionmaker 替代 sessionmaker
     async_session = async_sessionmaker(
         engine,
         class_=AsyncSession,
-        expire_on_commit=False,
-        autocommit=False,
-        autoflush=False
+        expire_on_commit=False
     )
     
     logger.info("Database engine and session configured successfully")
@@ -81,22 +82,20 @@ class AccountModel(Base):
     created_at = Column(DateTime, default=lambda: datetime.now())
     updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
 
-# 创建数据库会话
+@asynccontextmanager
 async def get_session() -> AsyncSession:
+    """创建数据库会话的异步上下文管理器"""
+    session = async_session()
     try:
-        session = async_session()
-        try:
-            # 测试数据库连接
-            await session.execute(text("SELECT 1"))
-            yield session
-        except Exception as e:
-            logger.error(f"Database session error: {str(e)}")
-            raise
-        finally:
-            await session.close()
+        # 确保连接有效
+        await session.execute(text("SELECT 1"))
+        yield session
     except Exception as e:
-        logger.error(f"Failed to create database session: {str(e)}")
+        logger.error(f"Database session error: {str(e)}")
+        await session.rollback()
         raise
+    finally:
+        await session.close()
 
 # 初始化数据库
 async def init_db():
