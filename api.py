@@ -8,21 +8,15 @@ from database import get_session, AccountModel, init_db
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
-import logging
 import asyncio
 import subprocess
 import sys
 import os
 import traceback
 from fastapi.responses import JSONResponse
-
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+from cursor_pro_keep_alive import main as register_account
+from browser_utils import BrowserManager
+from logger import info, error
 
 # 常量定义
 MAX_ACCOUNTS = 50
@@ -78,9 +72,10 @@ async def startup_event():
             "successful_runs": 0,
             "failed_runs": 0
         })
-        logger.info("Database initialized successfully")
+        info("系统启动完成，数据库已初始化")
     except Exception as e:
-        logger.error(f"Startup error: {str(e)}")
+        error(f"系统启动失败: {str(e)}")
+        error(traceback.format_exc())
         raise
 
 @app.on_event("shutdown")
@@ -94,11 +89,13 @@ async def shutdown_event():
                 try:
                     await background_tasks["registration_task"]
                 except asyncio.CancelledError:
-                    logger.info("Registration task cancelled during shutdown")
+                    info("关机时取消注册任务")
             background_tasks["registration_task"] = None
             registration_status["is_running"] = False
+        info("系统关闭完成")
     except Exception as e:
-        logger.error(f"Shutdown error: {str(e)}")
+        error(f"系统关闭出错: {str(e)}")
+        error(traceback.format_exc())
 
 class Account(BaseModel):
     email: str
@@ -125,94 +122,74 @@ async def get_account_count() -> int:
 async def run_registration():
     """运行注册脚本"""
     global registration_status
+    browser_manager = None
+    
     try:
-        logger.info("Registration task started running")
+        info("注册任务开始运行")
         
         while True:  # 改为无限循环，由 is_running 状态控制
             if not registration_status["is_running"]:
-                logger.info("Registration task stopped by status flag")
+                info("注册任务被状态标志停止")
                 break
                 
             try:
                 count = await get_account_count()
                 if count >= MAX_ACCOUNTS:
-                    logger.info(f"Already have {count} accounts, no need to register more")
+                    info(f"已达到最大账号数量 ({count}/{MAX_ACCOUNTS})")
                     registration_status["last_status"] = "completed"
                     registration_status["is_running"] = False
                     break
 
-                logger.info(f"Current account count: {count}, starting registration...")
+                info(f"开始注册尝试 (当前账号数: {count}/{MAX_ACCOUNTS})")
                 registration_status["last_run"] = datetime.now().isoformat()
                 registration_status["total_runs"] += 1
+
+                # 初始化浏览器管理器
+                if not browser_manager:
+                    browser_manager = BrowserManager()
                 
-                # 获取当前工作目录
-                current_dir = Path(__file__).parent.absolute()
-                script_path = current_dir / "cursor_pro_keep_alive.py"
+                # 调用注册函数
+                success = register_account()
                 
-                if not script_path.exists():
-                    error_msg = "Registration script not found"
-                    logger.error(error_msg)
-                    registration_status["last_status"] = f"error: {error_msg}"
-                    registration_status["failed_runs"] += 1
-                    registration_status["is_running"] = False
-                    raise FileNotFoundError(error_msg)
-                
-                # 设置环境变量
-                env = os.environ.copy()
-                env["PYTHONPATH"] = str(current_dir)
-                env["PYTHONIOENCODING"] = "utf-8"
-                
-                # 运行脚本并实时获取输出
-                process = await asyncio.create_subprocess_exec(
-                    sys.executable,
-                    str(script_path),
-                    env=env,
-                    cwd=str(current_dir),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                
-                stdout, stderr = await process.communicate()
-                
-                if process.returncode == 0:
+                if success:
                     registration_status["successful_runs"] += 1
                     registration_status["last_status"] = "success"
-                    logger.info(f"Registration successful: {stdout.decode()}")
+                    info("注册成功")
                 else:
                     registration_status["failed_runs"] += 1
-                    error_msg = stderr.decode() if stderr else f"failed with code {process.returncode}"
-                    registration_status["last_status"] = f"failed: {error_msg}"
-                    logger.error(f"Registration failed: {error_msg}")
+                    registration_status["last_status"] = "failed"
+                    info("注册失败")
                 
                 # 更新下次运行时间
                 next_run = datetime.now().timestamp() + REGISTRATION_INTERVAL
                 registration_status["next_run"] = next_run
                 
-                logger.info(f"Waiting {REGISTRATION_INTERVAL} seconds before next attempt...")
+                info(f"等待 {REGISTRATION_INTERVAL} 秒后进行下一次尝试")
                 await asyncio.sleep(REGISTRATION_INTERVAL)
                 
             except asyncio.CancelledError:
-                logger.info("Registration iteration cancelled")
+                info("注册迭代被取消")
                 registration_status["is_running"] = False
                 raise
             except Exception as e:
                 registration_status["failed_runs"] += 1
-                registration_status["last_status"] = f"error: {str(e)}"
-                logger.error(f"Error in registration process: {str(e)}")
-                logger.error(traceback.format_exc())
+                registration_status["last_status"] = "error"
+                error(f"注册过程出错: {str(e)}")
+                error(traceback.format_exc())
                 if not registration_status["is_running"]:
                     break
-                # 如果发生错误，等待一段时间后继续
                 await asyncio.sleep(REGISTRATION_INTERVAL)
     except asyncio.CancelledError:
-        logger.info("Registration task cancelled")
+        info("注册任务被取消")
         raise
     except Exception as e:
-        logger.error(f"Fatal error in registration task: {str(e)}")
-        logger.error(traceback.format_exc())
+        error(f"注册任务致命错误: {str(e)}")
+        error(traceback.format_exc())
         raise
     finally:
         registration_status["is_running"] = False
+        if browser_manager:
+            browser_manager.cleanup()
 
 @app.get("/", tags=["General"])
 async def root():
@@ -276,7 +253,8 @@ async def root():
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error in root endpoint: {str(e)}")
+        error(f"根端点错误: {str(e)}")
+        error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error fetching API information"
@@ -299,7 +277,8 @@ async def get_accounts():
                 raise HTTPException(status_code=404, detail="No accounts found")
             return accounts
     except Exception as e:
-        logger.error(f"Error fetching accounts: {str(e)}")
+        error(f"获取账号失败: {str(e)}")
+        error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/account/random", response_model=AccountResponse, tags=["Accounts"])
@@ -323,7 +302,8 @@ async def get_random_account():
                 data=Account.from_orm(account)
             )
     except Exception as e:
-        logger.error(f"Error fetching random account: {str(e)}")
+        error(f"获取随机账号失败: {str(e)}")
+        error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/account", response_model=AccountResponse, tags=["Accounts"])
@@ -345,7 +325,8 @@ async def create_account(account: Account):
                 message="Account created successfully"
             )
     except Exception as e:
-        logger.error(f"Error creating account: {str(e)}")
+        error(f"创建账号失败: {str(e)}")
+        error(traceback.format_exc())
         return AccountResponse(
             success=False,
             message=f"Failed to create account: {str(e)}"
@@ -379,7 +360,8 @@ async def delete_account(email: str):
                 message=f"Account {email} deleted successfully"
             )
     except Exception as e:
-        logger.error(f"Error deleting account {email}: {str(e)}")
+        error(f"删除账号失败: {str(e)}")
+        error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete account: {str(e)}"
@@ -393,6 +375,7 @@ async def start_registration():
         # 检查是否已达到最大账号数
         count = await get_account_count()
         if count >= MAX_ACCOUNTS:
+            info(f"拒绝注册请求 - 已达到最大账号数 ({count}/{MAX_ACCOUNTS})")
             return {
                 "success": False,
                 "message": f"Already have maximum number of accounts ({MAX_ACCOUNTS})"
@@ -400,6 +383,7 @@ async def start_registration():
 
         # 如果任务已在运行，返回相应消息
         if background_tasks["registration_task"] and not background_tasks["registration_task"].done():
+            info("注册请求被忽略 - 任务已在运行")
             return {
                 "success": True,
                 "message": "Registration task is already running",
@@ -432,18 +416,18 @@ async def start_registration():
             try:
                 task.result()  # 这将重新引发任何未处理的异常
             except asyncio.CancelledError:
-                logger.info("Registration task was cancelled")
+                info("注册任务被取消")
                 registration_status["last_status"] = "cancelled"
             except Exception as e:
-                logger.error(f"Registration task failed with error: {str(e)}")
-                registration_status["last_status"] = f"error: {str(e)}"
-                logger.error(traceback.format_exc())
+                error(f"注册任务失败: {str(e)}")
+                error(traceback.format_exc())
+                registration_status["last_status"] = "error"
             finally:
                 registration_status["is_running"] = False
                 background_tasks["registration_task"] = None
         
         task.add_done_callback(task_done_callback)
-        logger.info("Registration task manually started")
+        info("手动启动注册任务")
         
         return {
             "success": True,
@@ -456,10 +440,10 @@ async def start_registration():
             }
         }
     except Exception as e:
-        logger.error(f"Error starting registration task: {str(e)}")
-        logger.error(traceback.format_exc())
+        error(f"启动注册任务失败: {str(e)}")
+        error(traceback.format_exc())
         registration_status["is_running"] = False
-        registration_status["last_status"] = f"error: {str(e)}"
+        registration_status["last_status"] = "error"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start registration task: {str(e)}"
@@ -480,7 +464,7 @@ async def stop_registration():
         try:
             await background_tasks["registration_task"]
         except asyncio.CancelledError:
-            logger.info("Registration task cancelled")
+            info("注册任务被取消")
         
         background_tasks["registration_task"] = None
         registration_status["is_running"] = False
@@ -491,7 +475,8 @@ async def stop_registration():
             "message": "Registration task stopped successfully"
         }
     except Exception as e:
-        logger.error(f"Error stopping registration task: {str(e)}")
+        error(f"停止注册任务失败: {str(e)}")
+        error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to stop registration task: {str(e)}"
@@ -504,7 +489,7 @@ async def get_registration_status():
         count = await get_account_count()
         task_status = "running" if (background_tasks["registration_task"] and not background_tasks["registration_task"].done()) else "stopped"
         
-        return {
+        status_info = {
             "current_count": count,
             "max_accounts": MAX_ACCOUNTS,
             "is_registration_active": count < MAX_ACCOUNTS,
@@ -523,8 +508,13 @@ async def get_registration_status():
                 }
             }
         }
+        
+        info(f"请求注册状态 (当前账号数: {count}, 状态: {task_status})")
+        return status_info
+        
     except Exception as e:
-        logger.error(f"Error getting registration status: {str(e)}")
+        error(f"获取注册状态失败: {str(e)}")
+        error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get registration status: {str(e)}"
@@ -533,7 +523,7 @@ async def get_registration_status():
 # 自定义异常处理
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
-    logger.error(f"HTTP error occurred: {exc.detail}")
+    error(f"HTTP错误发生: {exc.detail}")
     return JSONResponse(
         status_code=exc.status_code,
         content={"success": False, "message": exc.detail}
@@ -541,8 +531,8 @@ async def http_exception_handler(request, exc):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
-    logger.error(f"Unexpected error occurred: {str(exc)}")
-    logger.error(f"Error details: {traceback.format_exc()}")
+    error(f"意外错误发生: {str(exc)}")
+    error(f"错误详情: {traceback.format_exc()}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
