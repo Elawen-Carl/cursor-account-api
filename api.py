@@ -67,6 +67,17 @@ async def startup_event():
     """启动时初始化数据库"""
     try:
         await init_db()
+        # 初始化注册状态
+        global registration_status
+        registration_status.update({
+            "is_running": False,
+            "last_status": None,
+            "last_run": None,
+            "next_run": None,
+            "total_runs": 0,
+            "successful_runs": 0,
+            "failed_runs": 0
+        })
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Startup error: {str(e)}")
@@ -77,12 +88,15 @@ async def shutdown_event():
     """关闭时清理资源"""
     try:
         # 取消注册任务
-        if background_tasks["registration_task"] and not background_tasks["registration_task"].done():
-            background_tasks["registration_task"].cancel()
-            try:
-                await background_tasks["registration_task"]
-            except asyncio.CancelledError:
-                logger.info("Registration task cancelled")
+        if background_tasks["registration_task"]:
+            if not background_tasks["registration_task"].done():
+                background_tasks["registration_task"].cancel()
+                try:
+                    await background_tasks["registration_task"]
+                except asyncio.CancelledError:
+                    logger.info("Registration task cancelled during shutdown")
+            background_tasks["registration_task"] = None
+            registration_status["is_running"] = False
     except Exception as e:
         logger.error(f"Shutdown error: {str(e)}")
 
@@ -114,12 +128,17 @@ async def run_registration():
     try:
         logger.info("Registration task started running")
         
-        while registration_status["is_running"]:
+        while True:  # 改为无限循环，由 is_running 状态控制
+            if not registration_status["is_running"]:
+                logger.info("Registration task stopped by status flag")
+                break
+                
             try:
                 count = await get_account_count()
                 if count >= MAX_ACCOUNTS:
                     logger.info(f"Already have {count} accounts, no need to register more")
                     registration_status["last_status"] = "completed"
+                    registration_status["is_running"] = False
                     break
 
                 logger.info(f"Current account count: {count}, starting registration...")
@@ -135,6 +154,7 @@ async def run_registration():
                     logger.error(error_msg)
                     registration_status["last_status"] = f"error: {error_msg}"
                     registration_status["failed_runs"] += 1
+                    registration_status["is_running"] = False
                     raise FileNotFoundError(error_msg)
                 
                 # 设置环境变量
@@ -173,12 +193,15 @@ async def run_registration():
                 
             except asyncio.CancelledError:
                 logger.info("Registration iteration cancelled")
+                registration_status["is_running"] = False
                 raise
             except Exception as e:
                 registration_status["failed_runs"] += 1
                 registration_status["last_status"] = f"error: {str(e)}"
                 logger.error(f"Error in registration process: {str(e)}")
                 logger.error(traceback.format_exc())
+                if not registration_status["is_running"]:
+                    break
                 # 如果发生错误，等待一段时间后继续
                 await asyncio.sleep(REGISTRATION_INTERVAL)
     except asyncio.CancelledError:
@@ -378,8 +401,14 @@ async def start_registration():
         # 如果任务已在运行，返回相应消息
         if background_tasks["registration_task"] and not background_tasks["registration_task"].done():
             return {
-                "success": False,
-                "message": "Registration task is already running"
+                "success": True,
+                "message": "Registration task is already running",
+                "status": {
+                    "is_running": registration_status["is_running"],
+                    "last_run": registration_status["last_run"],
+                    "next_run": datetime.fromtimestamp(registration_status["next_run"]).isoformat() if registration_status["next_run"] else None,
+                    "last_status": registration_status["last_status"]
+                }
             }
         
         # 重置注册状态
@@ -410,8 +439,8 @@ async def start_registration():
                 registration_status["last_status"] = f"error: {str(e)}"
                 logger.error(traceback.format_exc())
             finally:
-                if registration_status["is_running"]:  # 只有在任务仍在运行时才更新状态
-                    registration_status["is_running"] = False
+                registration_status["is_running"] = False
+                background_tasks["registration_task"] = None
         
         task.add_done_callback(task_done_callback)
         logger.info("Registration task manually started")
