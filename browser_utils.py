@@ -8,12 +8,45 @@ class BrowserManager:
     def __init__(self, extension_path=None):
         self.browser = None
         self.extension_path = extension_path
+        self.is_vercel = bool(os.environ.get("VERCEL"))
 
     def init_browser(self):
-        co = self._get_browser_options()
-        self.browser = Chromium(co)
-        info("浏览器初始化完成")
-        return self.browser
+        """初始化浏览器"""
+        try:
+            if self.is_vercel:
+                info("Vercel环境检测到，使用特殊配置")
+                # 在 Vercel 环境中使用特殊配置
+                co = ChromiumOptions()
+                co.set_argument('--headless')
+                co.set_argument('--no-sandbox')
+                co.set_argument('--disable-dev-shm-usage')
+                co.set_argument('--disable-gpu')
+                co.set_argument('--disable-software-rasterizer')
+                co.set_argument('--hide-scrollbars')
+                co.set_argument('--disable-extensions')
+                co.set_argument('--single-process')
+                co.set_argument('--ignore-certificate-errors')
+                co.set_argument('--remote-debugging-port=9222')
+                
+                # 设置 Chrome 路径（如果在 Vercel 中有特定位置）
+                chrome_path = os.environ.get('CHROME_PATH', '/usr/bin/chromium-browser')
+                if os.path.exists(chrome_path):
+                    co.set_browser_path(chrome_path)
+                else:
+                    error(f"Chrome不可用: {chrome_path} 不存在")
+                    return None
+            else:
+                info("本地环境，使用默认配置")
+                co = ChromiumOptions()
+                co.set_argument('--headless')
+            
+            self.browser = Chromium(co)
+            info("浏览器初始化成功")
+            return self.browser
+            
+        except Exception as e:
+            error(f"浏览器初始化失败: {str(e)}")
+            return None
 
     def _get_browser_options(self):
         co = ChromiumOptions()
@@ -68,10 +101,13 @@ class BrowserManager:
         
         return None
 
-    def quit(self):
-        if self.browser:
-            try:
+    def cleanup(self):
+        """清理浏览器资源"""
+        try:
+            if self.browser:
                 self.browser.quit()
-                info("浏览器已关闭")
-            except Exception as e:
-                error("浏览器关闭失败:", str(e))
+                info("浏览器资源已清理")
+        except Exception as e:
+            error(f"清理浏览器资源失败: {str(e)}")
+        finally:
+            self.browser = None

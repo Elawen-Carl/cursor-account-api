@@ -143,18 +143,35 @@ async def run_registration():
                 # 初始化浏览器管理器
                 if not browser_manager:
                     browser_manager = BrowserManager()
+                    if not browser_manager.init_browser():
+                        error("浏览器初始化失败，终止注册任务")
+                        registration_status["failed_runs"] += 1
+                        registration_status["last_status"] = "error"
+                        registration_status["is_running"] = False
+                        break
                 
                 # 调用注册函数
-                success = await asyncio.get_event_loop().run_in_executor(None, register_account)
-                
-                if success:
-                    registration_status["successful_runs"] += 1
-                    registration_status["last_status"] = "success"
-                    info("注册成功")
-                else:
+                try:
+                    success = await asyncio.get_event_loop().run_in_executor(None, register_account)
+                    
+                    if success:
+                        registration_status["successful_runs"] += 1
+                        registration_status["last_status"] = "success"
+                        info("注册成功")
+                    else:
+                        registration_status["failed_runs"] += 1
+                        registration_status["last_status"] = "failed"
+                        info("注册失败")
+                except SystemExit:
+                    # 捕获 SystemExit 异常，这是注册脚本正常退出的方式
+                    info("注册脚本正常退出")
+                    if registration_status["last_status"] != "error":
+                        registration_status["last_status"] = "completed"
+                except Exception as e:
+                    error(f"注册过程执行出错: {str(e)}")
+                    error(traceback.format_exc())
                     registration_status["failed_runs"] += 1
-                    registration_status["last_status"] = "failed"
-                    info("注册失败")
+                    registration_status["last_status"] = "error"
                 
                 # 更新下次运行时间
                 next_run = datetime.now().timestamp() + REGISTRATION_INTERVAL
@@ -184,7 +201,11 @@ async def run_registration():
     finally:
         registration_status["is_running"] = False
         if browser_manager:
-            browser_manager.cleanup()
+            try:
+                browser_manager.cleanup()
+            except Exception as e:
+                error(f"清理浏览器资源时出错: {str(e)}")
+                error(traceback.format_exc())
 
 @app.get("/", tags=["General"])
 async def root():
