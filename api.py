@@ -4,7 +4,7 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from pathlib import Path
-from database import get_session, AccountModel, init_db, async_session, engine
+from database import get_session, AccountModel, init_db, async_session, engine, ensure_event_loop
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
@@ -45,6 +45,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def db_session_middleware(request, call_next):
+    """确保每个请求都有可用的事件循环"""
+    ensure_event_loop()
+    response = await call_next(request)
+    return response
 
 class Account(BaseModel):
     email: str
@@ -116,6 +123,7 @@ async def run_registration():
 async def startup_event():
     """启动时初始化数据库并开始自动注册进程"""
     try:
+        ensure_event_loop()
         await init_db()
         logger.info("Database initialized successfully")
         

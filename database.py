@@ -35,11 +35,26 @@ def get_database_url():
     logger.info(f"Database configuration loaded successfully")
     return url
 
+def ensure_event_loop():
+    """确保有可用的事件循环，如果没有则创建一个新的"""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
+
 def create_engine_and_session():
     """创建数据库引擎和会话工厂"""
     try:
         # 获取数据库URL
         POSTGRES_URL = get_database_url()
+        
+        # 确保有可用的事件循环
+        ensure_event_loop()
         
         # 创建异步引擎，优化连接池配置
         engine = create_async_engine(
@@ -91,6 +106,9 @@ class AccountModel(Base):
 @asynccontextmanager
 async def get_session() -> AsyncSession:
     """创建数据库会话的异步上下文管理器"""
+    # 确保有可用的事件循环
+    ensure_event_loop()
+    
     session = async_session()
     try:
         # 确保连接有效
@@ -98,7 +116,10 @@ async def get_session() -> AsyncSession:
         yield session
     except Exception as e:
         logger.error(f"Database session error: {str(e)}")
-        await session.rollback()
+        try:
+            await session.rollback()
+        except Exception as rollback_error:
+            logger.error(f"Error during rollback: {str(rollback_error)}")
         raise
     finally:
         try:
@@ -110,6 +131,9 @@ async def get_session() -> AsyncSession:
 async def init_db():
     """初始化数据库表结构"""
     try:
+        # 确保有可用的事件循环
+        ensure_event_loop()
+        
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database initialized successfully")
