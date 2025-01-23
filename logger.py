@@ -1,73 +1,57 @@
 import os
 import sys
 import logging
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-def setup_logger(name='cursor_logger'):
-    """设置日志系统"""
-    # 创建logs目录
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-    
-    # 设置日志文件名（使用当前日期）
-    log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
+def setup_logger():
+    """设置日志记录器"""
+    logger = logging.getLogger("cursor_api")
+    logger.setLevel(logging.INFO)
     
     # 创建格式化器
     formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        "%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
     )
     
-    # 文件处理器
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.DEBUG)
-    
-    # 控制台处理器
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.INFO)
-    
-    # 配置根日志记录器
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    # 在非 Vercel 环境中使用文件处理器
+    if not os.environ.get("VERCEL"):
+        try:
+            log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
+            
+            log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except OSError:
+            # 如果无法创建文件处理器，使用标准输出
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setFormatter(formatter)
+            logger.addHandler(stream_handler)
+    else:
+        # 在 Vercel 环境中使用标准输出
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
     
     return logger
 
-# 创建全局logger实例
 logger = setup_logger()
 
-def info(*args):
-    """记录信息日志"""
-    try:
-        message = ' '.join(str(arg) for arg in args)
-        logger.info(message)
-    except Exception as e:
-        logger.error(f"记录信息日志时出错: {str(e)}")
+def info(message):
+    """记录信息级别的日志"""
+    logger.info(message)
 
-def error(*args):
-    """记录错误日志"""
-    try:
-        message = ' '.join(str(arg) for arg in args)
-        logger.error(message)
-    except Exception as e:
-        logger.error(f"记录错误日志时出错: {str(e)}")
+def error(message):
+    """记录错误级别的日志"""
+    logger.error(message)
 
-def warning(*args):
-    """记录警告日志"""
-    try:
-        message = ' '.join(str(arg) for arg in args)
-        logger.warning(message)
-    except Exception as e:
-        logger.error(f"记录警告日志时出错: {str(e)}")
+def warning(message):
+    """记录警告级别的日志"""
+    logger.warning(message)
 
-def debug(*args):
-    """记录调试日志"""
-    try:
-        message = ' '.join(str(arg) for arg in args)
-        logger.debug(message)
-    except Exception as e:
-        logger.error(f"记录调试日志时出错: {str(e)}") 
+def debug(message):
+    """记录调试级别的日志"""
+    logger.debug(message) 
