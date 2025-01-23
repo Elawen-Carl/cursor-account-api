@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
 import logging
-import asyncioka
+import asyncio
 import subprocess
 import sys
 import os
