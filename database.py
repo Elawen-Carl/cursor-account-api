@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 # 配置日志
@@ -34,38 +35,43 @@ def get_database_url():
     logger.info(f"Database configuration loaded successfully")
     return url
 
-try:
-    # 获取数据库URL
-    POSTGRES_URL = get_database_url()
-    
-    # 创建异步引擎，优化连接池配置
-    engine = create_async_engine(
-        POSTGRES_URL,
-        echo=False,
-        connect_args={
-            "ssl": True,
-            "server_settings": {"client_encoding": "utf8"},
-            "command_timeout": 10  # 添加命令超时
-        },
-        pool_pre_ping=True,
-        pool_size=5,  # 减小连接池大小
-        max_overflow=10,
-        pool_timeout=30,  # 添加池超时
-        pool_recycle=1800  # 30分钟后回收连接
-    )
-    
-    # 使用 async_sessionmaker 替代 sessionmaker
-    async_session = async_sessionmaker(
-        engine,
-        class_=AsyncSession,
-        expire_on_commit=False
-    )
-    
-    logger.info("Database engine and session configured successfully")
-    
-except Exception as e:
-    logger.error(f"Failed to initialize database: {str(e)}")
-    raise
+def create_engine_and_session():
+    """创建数据库引擎和会话工厂"""
+    try:
+        # 获取数据库URL
+        POSTGRES_URL = get_database_url()
+        
+        # 创建异步引擎，优化连接池配置
+        engine = create_async_engine(
+            POSTGRES_URL,
+            echo=False,
+            connect_args={
+                "ssl": True,
+                "server_settings": {"client_encoding": "utf8"},
+                "command_timeout": 10
+            },
+            pool_pre_ping=True,
+            pool_size=1,  # Serverless环境建议使用较小的连接池
+            max_overflow=0,
+            pool_timeout=30,
+            pool_recycle=1800
+        )
+        
+        # 创建会话工厂
+        session_maker = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False
+        )
+        
+        return engine, session_maker
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {str(e)}")
+        raise
+
+# 创建全局引擎和会话工厂
+engine, async_session = create_engine_and_session()
 
 # 基础模型类
 class Base(DeclarativeBase):
@@ -95,10 +101,14 @@ async def get_session() -> AsyncSession:
         await session.rollback()
         raise
     finally:
-        await session.close()
+        try:
+            await session.close()
+        except Exception as e:
+            logger.error(f"Error closing session: {str(e)}")
 
 # 初始化数据库
 async def init_db():
+    """初始化数据库表结构"""
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

@@ -4,7 +4,7 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from pathlib import Path
-from database import get_session, AccountModel, init_db, async_session
+from database import get_session, AccountModel, init_db, async_session, engine
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
@@ -125,6 +125,15 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Startup error: {str(e)}")
         raise
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """关闭时清理资源"""
+    try:
+        await engine.dispose()
+        logger.info("Database connections closed")
+    except Exception as e:
+        logger.error(f"Shutdown error: {str(e)}")
 
 async def import_accounts_from_file():
     """从本地文件导入账号到数据库"""
