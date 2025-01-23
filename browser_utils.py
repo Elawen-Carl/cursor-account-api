@@ -28,12 +28,38 @@ class BrowserManager:
                 co.set_argument('--ignore-certificate-errors')
                 co.set_argument('--remote-debugging-port=9222')
                 
-                # 设置 Chrome 路径（如果在 Vercel 中有特定位置）
-                chrome_path = os.environ.get('CHROME_PATH', '/usr/bin/chromium-browser')
-                if os.path.exists(chrome_path):
-                    co.set_browser_path(chrome_path)
-                else:
-                    error(f"Chrome不可用: {chrome_path} 不存在")
+                # 设置 Chrome 路径（Vercel 环境中的路径）
+                chrome_paths = [
+                    '/opt/google/chrome/chrome',  # Vercel 标准路径
+                    '/usr/bin/google-chrome',     # 备选路径 1
+                    '/usr/bin/chromium',          # 备选路径 2
+                    '/usr/bin/chromium-browser'   # 备选路径 3
+                ]
+                
+                chrome_found = False
+                for chrome_path in chrome_paths:
+                    if os.path.exists(chrome_path):
+                        info(f"找到Chrome: {chrome_path}")
+                        co.set_browser_path(chrome_path)
+                        chrome_found = True
+                        break
+                
+                if not chrome_found:
+                    error("未找到可用的Chrome浏览器")
+                    # 尝试安装 Chrome
+                    try:
+                        info("尝试安装Chrome...")
+                        os.system("apt-get update && apt-get install -y chromium-browser")
+                        if os.path.exists('/usr/bin/chromium-browser'):
+                            info("Chrome安装成功")
+                            co.set_browser_path('/usr/bin/chromium-browser')
+                            chrome_found = True
+                    except Exception as e:
+                        error(f"Chrome安装失败: {str(e)}")
+                        return None
+                    
+                if not chrome_found:
+                    error("无法找到或安装Chrome浏览器")
                     return None
             else:
                 info("本地环境，使用默认配置")
