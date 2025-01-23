@@ -28,29 +28,24 @@ class BrowserManager:
                 co.set_argument('--ignore-certificate-errors')
                 co.set_argument('--remote-debugging-port=9222')
                 
-                # Vercel 环境中的 Chrome 路径
-                chrome_paths = [
-                    '/tmp/chromium/chrome',  # Vercel 临时目录
-                    '/tmp/chromium/chromium',
-                    '/tmp/.local-chromium/chrome',
-                    '/opt/google/chrome/chrome',
-                    '/usr/bin/google-chrome',
-                    '/usr/bin/chromium'
-                ]
-                
-                chrome_found = False
-                for chrome_path in chrome_paths:
-                    info(f"尝试Chrome路径: {chrome_path}")
-                    if os.path.exists(chrome_path):
-                        co.set_browser_path(chrome_path)
-                        info(f"找到可用的Chrome: {chrome_path}")
-                        chrome_found = True
-                        break
-                
-                if not chrome_found:
-                    error("未找到可用的Chrome，尝试使用系统Chrome")
-                    # 不设置具体路径，让系统自动查找
-                    pass
+                try:
+                    # 使用 playwright 的 chromium
+                    from playwright.sync_api import sync_playwright
+                    with sync_playwright() as p:
+                        browser_path = p.chromium.executable_path
+                        info(f"Playwright Chromium 路径: {browser_path}")
+                        if os.path.exists(browser_path):
+                            info(f"使用 Playwright Chromium: {browser_path}")
+                            co.set_browser_path(browser_path)
+                        else:
+                            error("Playwright Chromium 不可用")
+                            return None
+                except ImportError:
+                    error("Playwright 未安装，请先安装: pip install playwright")
+                    return None
+                except Exception as e:
+                    error(f"获取 Playwright Chromium 失败: {str(e)}")
+                    return None
                 
             else:
                 info("本地环境，使用默认配置")
