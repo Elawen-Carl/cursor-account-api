@@ -64,15 +64,10 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """启动时初始化数据库并开始自动注册进程"""
+    """启动时初始化数据库"""
     try:
         await init_db()
         logger.info("Database initialized successfully")
-        
-        # 启动自动注册任务
-        loop = asyncio.get_running_loop()
-        background_tasks["registration_task"] = loop.create_task(run_registration())
-        logger.info("Auto registration task started")
     except Exception as e:
         logger.error(f"Startup error: {str(e)}")
         raise
@@ -364,21 +359,96 @@ async def delete_account(email: str):
             detail=f"Failed to delete account: {str(e)}"
         )
 
+@app.post("/registration/start", tags=["Registration"])
+async def start_registration():
+    """手动启动注册任务"""
+    global background_tasks
+    try:
+        if background_tasks["registration_task"] and not background_tasks["registration_task"].done():
+            return {
+                "success": False,
+                "message": "Registration task is already running"
+            }
+        
+        loop = asyncio.get_running_loop()
+        background_tasks["registration_task"] = loop.create_task(run_registration())
+        logger.info("Registration task manually started")
+        
+        return {
+            "success": True,
+            "message": "Registration task started successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error starting registration task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start registration task: {str(e)}"
+        )
+
+@app.post("/registration/stop", tags=["Registration"])
+async def stop_registration():
+    """手动停止注册任务"""
+    global background_tasks
+    try:
+        if not background_tasks["registration_task"] or background_tasks["registration_task"].done():
+            return {
+                "success": False,
+                "message": "No running registration task found"
+            }
+        
+        background_tasks["registration_task"].cancel()
+        try:
+            await background_tasks["registration_task"]
+        except asyncio.CancelledError:
+            logger.info("Registration task cancelled")
+        
+        background_tasks["registration_task"] = None
+        registration_status["is_running"] = False
+        registration_status["last_status"] = "manually stopped"
+        
+        return {
+            "success": True,
+            "message": "Registration task stopped successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error stopping registration task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to stop registration task: {str(e)}"
+        )
+
 @app.get("/registration/status", tags=["Registration"])
 async def get_registration_status():
     """获取注册状态"""
     try:
-        async with get_session() as session:
-            count = await get_account_count()
-            return {
-                "current_count": count,
-                "max_accounts": MAX_ACCOUNTS,
-                "is_registration_active": count < MAX_ACCOUNTS,
-                "remaining_slots": MAX_ACCOUNTS - count
+        count = await get_account_count()
+        task_status = "running" if (background_tasks["registration_task"] and not background_tasks["registration_task"].done()) else "stopped"
+        
+        return {
+            "current_count": count,
+            "max_accounts": MAX_ACCOUNTS,
+            "is_registration_active": count < MAX_ACCOUNTS,
+            "remaining_slots": MAX_ACCOUNTS - count,
+            "task_status": task_status,
+            "registration_details": {
+                "is_running": registration_status["is_running"],
+                "last_run": registration_status["last_run"],
+                "last_status": registration_status["last_status"],
+                "next_run": registration_status["next_run"],
+                "statistics": {
+                    "total_runs": registration_status["total_runs"],
+                    "successful_runs": registration_status["successful_runs"],
+                    "failed_runs": registration_status["failed_runs"],
+                    "success_rate": f"{(registration_status['successful_runs'] / registration_status['total_runs'] * 100):.1f}%" if registration_status['total_runs'] > 0 else "N/A"
+                }
             }
+        }
     except Exception as e:
         logger.error(f"Error getting registration status: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get registration status: {str(e)}"
+        )
 
 # 自定义异常处理
 @app.exception_handler(HTTPException)
