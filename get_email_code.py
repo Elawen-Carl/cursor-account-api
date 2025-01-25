@@ -10,7 +10,7 @@ class EmailVerificationHandler:
         self.mail_url = mail_url
 
     def get_verification_code(self, email):
-        info("处理邮箱验证码，当前邮箱:", email)
+        info(f"处理邮箱验证码，当前邮箱: {email}")
         code = None
 
         try:
@@ -25,7 +25,7 @@ class EmailVerificationHandler:
             tab_mail.close()
 
         except Exception as e:
-            error("获取邮箱验证码失败:", str(e))
+            error(f"获取邮箱验证码失败: {str(e)}")
 
         return code
 
@@ -52,7 +52,7 @@ class EmailVerificationHandler:
                 retry_count += 1
             
             except Exception as e:
-                error("获取邮件失败:", str(e))
+                error(f"获取邮件失败: {str(e)}")
                 time.sleep(2)
                 retry_count += 1
 
@@ -70,14 +70,14 @@ class EmailVerificationHandler:
                         matches = re.findall(r'\b\d{6}\b', content)
                         for match in matches:
                             if "verification code" in content.lower() or "verify" in content.lower():
-                                info("找到验证码:", match)
+                                info(f"找到验证码: {match}")
                                 return match
 
                 info("等待验证码加载...")
                 time.sleep(2)
 
             except Exception as e:
-                error("获取验证码失败:", str(e))
+                error(f"获取验证码失败: {str(e)}")
                 time.sleep(2)
 
         error("未找到验证码")

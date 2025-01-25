@@ -3,7 +3,7 @@ import sys
 import psutil
 import time
 import random
-from logger import info, error, warning, debug
+from logger import info, info, warning, info
 
 os.environ["PYTHONWARNINGS"] = "ignore"
 
@@ -25,6 +25,7 @@ TOTAL_USAGE = 0
 def handle_turnstile(tab):
     try:
         while True:
+            info("等待验证框架...")
             try:
                 challengeCheck = (
                     tab.ele("@id=cf-turnstile", timeout=2)
@@ -35,13 +36,15 @@ def handle_turnstile(tab):
                 )
 
                 if challengeCheck:
+                    info("找到验证框架，尝试处理...")
                     time.sleep(random.uniform(1, 3))
                     challengeCheck.click()
                     time.sleep(2)
                     return True
             except:
+                info("未找到验证框架")
                 pass
-
+            info("等待验证码...")
             if tab.ele("@name=password"):
                 break
             if tab.ele("@data-index=0"):
@@ -50,8 +53,10 @@ def handle_turnstile(tab):
                 break
 
             time.sleep(random.uniform(1, 2))
+        
+
     except Exception as e:
-        error("处理验证失败:", str(e))
+        info("处理验证失败:", str(e))
         return False
 
 
@@ -71,7 +76,7 @@ def get_cursor_session_token(tab, max_attempts=5, retry_interval=3):
             total_usage = usage_ele.text.split("/")[-1].strip()
             global TOTAL_USAGE
             TOTAL_USAGE = total_usage
-            info("使用限制:", total_usage)
+            info(f"使用限制: {total_usage}")
 
         info("获取Cookie中...")
         attempts = 0
@@ -88,13 +93,13 @@ def get_cursor_session_token(tab, max_attempts=5, retry_interval=3):
                     warning("未找到Cursor会话Token，重试中...")
                     time.sleep(retry_interval)
                 else:
-                    error("未找到Cursor会话Token")
+                    info("未找到Cursor会话Token")
 
             except Exception as e:
-                error("获取Token失败:", str(e))
+                info("获取Token失败:", str(e))
                 attempts += 1
                 if attempts < max_attempts:
-                    info("重试获取Token，等待时间:", retry_interval)
+                    info(f"重试获取Token，等待时间: {retry_interval}")
                     time.sleep(retry_interval)
 
         return False
@@ -124,97 +129,131 @@ def get_temp_email(tab):
                     else:
                         stable_count = 0
                         last_email = current_email
-                        info("当前邮箱:", current_email)
+                        info(f"当前邮箱: {current_email}")
 
             info("等待邮箱分配...")
             time.sleep(1)
 
         except Exception as e:
-            warning("获取邮箱出错:", str(e))
+            warning(f"获取邮箱出错: {str(e)}")
             time.sleep(1)
             stable_count = 0
 
-    error("未能获取邮箱")
+    info("未能获取邮箱")
     raise ValueError("未能获取邮箱")
 
 
 def sign_up_account(browser, tab, account_info):
     info("开始注册账号")
-    info("账号信息:", f"邮箱: {account_info['email']}, 姓名: {account_info['first_name']} {account_info['last_name']}")
+    info(f"账号信息: 邮箱: {account_info['email']}, 姓名: {account_info['first_name']} {account_info['last_name']}")
     tab.get(SIGN_UP_URL)
-
+    time.sleep(random.uniform(4, 6))
     try:
         if tab.ele("@name=first_name"):
-            debug("填写姓名信息...")
+            info("填写名字信息...")
             tab.actions.click("@name=first_name").input(account_info["first_name"])
-            time.sleep(random.uniform(1, 3))
+            time.sleep(random.uniform(3, 5))
+            tab.get_screenshot(path="1.填写名字.png")
 
+            info("填写姓氏信息...")
             tab.actions.click("@name=last_name").input(account_info["last_name"])
-            time.sleep(random.uniform(1, 3))
+            time.sleep(random.uniform(3, 5))
+            tab.get_screenshot(path="2.填写姓氏.png")
 
+            info("填写邮箱信息...")
             tab.actions.click("@name=email").input(account_info["email"])
-            time.sleep(random.uniform(1, 3))
+            time.sleep(random.uniform(3, 5))
+            tab.get_screenshot(path="3.填写邮箱.png")
 
             tab.actions.click("@type=submit")
+            time.sleep(random.uniform(4, 6))
             info("基本信息提交成功")
+            tab.get_screenshot(path="4.提交基本信息.png")
 
     except Exception as e:
-        error(f"填写姓名信息失败: {str(e)}")
-        return False
+        info(f"填写姓名信息失败: {str(e)}")
+        return "ERROR"
 
-    debug("处理验证码...")
+    info("处理turnstile...")
     handle_turnstile(tab)
+    tab.get_screenshot(path="5.处理turnstile.png")
+    time.sleep(random.uniform(3, 5))
 
     try:
         if tab.ele("@name=password"):
-            debug("设置密码...")
+            info("设置密码...")
             tab.ele("@name=password").input(account_info["password"])
-            time.sleep(random.uniform(1, 3))
+            time.sleep(random.uniform(3, 5))
 
             tab.ele("@type=submit").click()
+            time.sleep(random.uniform(4, 6))
             info("密码设置成功")
 
+            if tab.ele("This email is not available"):
+                info("邮箱已被使用")
+                return "EMAIL_USED"
+                
+            if tab.ele("Sign up is restricted."):
+                info("注册限制")
+                return "SIGNUP_RESTRICTED"
+
+            if tab.ele("Unable to verify the user is human"):
+                info("需要更换邮箱")
+                return "VERIFY_FAILED"
+
     except Exception as e:
-        error(f"密码设置失败: {str(e)}")
-        return False
+        info(f"密码设置失败: {str(e)}")
+        return "ERROR"
 
-    time.sleep(random.uniform(1, 3))
+    time.sleep(random.uniform(3, 5))
+    tab.get_screenshot(path="7.检查邮箱是否已被使用.png")
+    info("检查邮箱是否已被使用...")
     if tab.ele("This email is not available."):
-        warning("邮箱已被使用")
-        return False
+        info("邮箱已被使用")
+        return "EMAIL_USED"
+    info("邮箱未被使用")
 
-    debug("处理最终验证...")
+    info("处理最终验证...")
     handle_turnstile(tab)
 
     email_handler = EmailVerificationHandler(browser, MAIL_URL)
 
     while True:
+        info("等待注册成功...")
         try:
             if tab.ele("Account Settings"):
                 info("注册成功，已进入账号设置页面")
+                tab.get_screenshot(path="8.注册成功.png")
                 break
             if tab.ele("@data-index=0"):
-                debug("等待验证码...")
+                info("等待验证码...")
                 code = email_handler.get_verification_code(account_info["email"])
+                tab.get_screenshot(path="9.等待验证码.png")
                 if not code:
-                    error("获取验证码失败")
-                    return False
+                    info("获取验证码失败")
+                    return "ERROR"
 
-                debug(f"输入验证码: {code}")
+                info(f"输入验证码: {code}")
+                tab.get_screenshot(path="10.输入验证码.png")
                 i = 0
                 for digit in code:
                     tab.ele(f"@data-index={i}").input(digit)
-                    time.sleep(random.uniform(0.1, 0.3))
+                    time.sleep(random.uniform(0.3, 0.6))
                     i += 1
                 info("验证码输入完成")
+                time.sleep(random.uniform(3, 5))
+                tab.get_screenshot(path="11.验证码输入完成.png")
                 break
         except Exception as e:
-            error(f"验证码处理失败: {str(e)}")
+            info(f"验证码处理失败: {str(e)}")
+            return "ERROR"
 
-    debug("完成最终验证...")
+    info("完成最终验证...")
     handle_turnstile(tab)
+    time.sleep(random.uniform(3, 5))
+    tab.get_screenshot(path="12.完成最终验证.png")
     info("账号注册流程完成")
-    return True
+    return "SUCCESS"
 
 
 class EmailGenerator:
@@ -319,7 +358,7 @@ class EmailGenerator:
             import asyncio
 
             async def save_to_db():
-                debug(f"开始保存账号信息: {self.email}")
+                info(f"开始保存账号信息: {self.email}")
                 async with async_session() as session:
                     # 检查账号是否已存在
                     from sqlalchemy import select
@@ -329,12 +368,12 @@ class EmailGenerator:
                     existing_account = result.scalar_one_or_none()
                     
                     if existing_account:
-                        debug("更新现有账号信息")
+                        info("更新现有账号信息")
                         existing_account.token = token
                         existing_account.password = self.default_password
                         existing_account.usage_limit = str(total_usage)
                     else:
-                        debug("创建新账号记录")
+                        info("创建新账号记录")
                         account = AccountModel(
                             email=self.email,
                             password=self.default_password,
@@ -349,16 +388,15 @@ class EmailGenerator:
 
             return asyncio.run(save_to_db())
         except Exception as e:
-            error(f"保存账号信息失败: {str(e)}")
+            info(f"保存账号信息失败: {str(e)}")
             return False
-
 
 def cleanup_and_exit(browser_manager=None, exit_code=0):
     """清理资源并退出程序"""
     try:
         if browser_manager:
             info("正在关闭浏览器")
-            browser_manager.quit()
+            browser_manager.cleanup()
 
         current_process = psutil.Process()
         children = current_process.children(recursive=True)
@@ -372,48 +410,84 @@ def cleanup_and_exit(browser_manager=None, exit_code=0):
         sys.exit(exit_code)
 
     except Exception as e:
-        error("清理退出时发生错误:", str(e))
+        info(f"清理退出时发生错误: {str(e)}")
         sys.exit(1)
 
 
 def main():
     browser_manager = None
+    max_retries = 3  # 最大重试次数
+    current_retry = 0
+    
     try:
         browser_manager = BrowserManager()
         browser = browser_manager.init_browser()
+        
+        while current_retry < max_retries:
+            try:
+                mail_tab = browser.new_tab(MAIL_URL)
+                browser.activate_tab(mail_tab)
+                time.sleep(2)
 
-        mail_tab = browser.new_tab(MAIL_URL)
-        browser.activate_tab(mail_tab)
-        time.sleep(2)
+                email_js = get_temp_email(mail_tab)
 
-        email_js = get_temp_email(mail_tab)
+                email_generator = EmailGenerator()
+                email_generator.set_email(email_js)
+                account_info = email_generator.get_account_info()
 
-        email_generator = EmailGenerator()
-        email_generator.set_email(email_js)
-        account_info = email_generator.get_account_info()
+                signup_tab = browser.new_tab(SIGN_UP_URL)
+                browser.activate_tab(signup_tab)
+                time.sleep(2)
 
-        signup_tab = browser.new_tab(SIGN_UP_URL)
-        browser.activate_tab(signup_tab)
-        time.sleep(2)
+                signup_tab.run_js("try { turnstile.reset() } catch(e) { }")
 
-        signup_tab.run_js("try { turnstile.reset() } catch(e) { }")
-
-        if sign_up_account(browser, signup_tab, account_info):
-            token = get_cursor_session_token(signup_tab)
-            info("获取到账号Token:", token)
-            if token:
-                email_generator._save_account_info(token, TOTAL_USAGE)
-            else:
-                error("获取Cursor会话Token失败")
-        else:
-            error("注册失败")
-        info("注册流程完成")
-        cleanup_and_exit(browser_manager, 0)
+                result = sign_up_account(browser, signup_tab, account_info)
+                
+                if result == "SUCCESS":
+                    token = get_cursor_session_token(signup_tab)
+                    info("获取到账号Token:", token)
+                    if token:
+                        email_generator._save_account_info(token, TOTAL_USAGE)
+                        info("注册流程完成")
+                        cleanup_and_exit(browser_manager, 0)
+                    else:
+                        info("获取Cursor会话Token失败")
+                        current_retry += 1
+                elif result in ["EMAIL_USED", "SIGNUP_RESTRICTED", "VERIFY_FAILED"]:
+                    info(f"遇到问题: {result}，准备重试...")
+                    signup_tab.get_screenshot(path="13.遇到问题.png")
+                    current_retry += 1
+                    # 关闭当前标签页，准备重新开始
+                    signup_tab.close()
+                    mail_tab.close()
+                    time.sleep(2)
+                else:  # ERROR
+                    info("遇到错误，准备重试...")
+                    current_retry += 1
+                    signup_tab.close()
+                    mail_tab.close()
+                    time.sleep(2)
+                    
+            except Exception as e:
+                info(f"当前尝试发生错误: {str(e)}")
+                current_retry += 1
+                time.sleep(2)
+                try:
+                    # 尝试关闭可能存在的标签页
+                    if 'signup_tab' in locals():
+                        signup_tab.close()
+                    if 'mail_tab' in locals():
+                        mail_tab.close()
+                except:
+                    pass
+                
+        info(f"达到最大重试次数 {max_retries}，注册失败")
+        cleanup_and_exit(browser_manager, 1)
 
     except Exception as e:
-        error("主程序错误:", str(e))
+        info("主程序错误:", str(e))
         import traceback
-        error("错误详情:", traceback.format_exc())
+        info("错误详情:", traceback.format_exc())
         cleanup_and_exit(browser_manager, 1)
     finally:
         cleanup_and_exit(browser_manager, 1)

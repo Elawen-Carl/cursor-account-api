@@ -48,9 +48,14 @@ class BrowserManager:
                     return None
                 
             else:
-                info("本地环境，使用默认配置")
+                info("本地环境，使用调试配置")
                 co = ChromiumOptions()
-                co.set_argument('--headless')
+                # 关闭 headless 模式，显示浏览器窗口
+                co.headless(False)
+                # 设置窗口大小
+                co.set_argument('--window-size=1280,800')
+                # 添加调试端口
+                co.set_argument('--remote-debugging-port=9222')
             
             self.browser = Chromium(co)
             info("浏览器初始化成功")
