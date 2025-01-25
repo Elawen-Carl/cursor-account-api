@@ -213,12 +213,10 @@ def sign_up_account(browser, tab, account_info):
     handle_turnstile(tab)
 
     if tab.ele("This email is not available."):
-        tab.get_screenshot(path="7.检查邮箱是否已被使用.png")
         info("邮箱已被使用")
         return "EMAIL_USED"
     
     if tab.ele("Sign up is restricted."):
-        tab.get_screenshot(path="8.注册限制.png")
         info("注册限制")
         return "SIGNUP_RESTRICTED"
 
@@ -229,18 +227,15 @@ def sign_up_account(browser, tab, account_info):
         try:
             if tab.ele("Account Settings"):
                 info("注册成功，已进入账号设置页面")
-                tab.get_screenshot(path="8.注册成功.png")
                 break
             if tab.ele("@data-index=0"):
                 info("等待验证码...")
                 code = email_handler.get_verification_code(account_info["email"])
-                tab.get_screenshot(path="9.等待验证码.png")
                 if not code:
                     info("获取验证码失败")
                     return "ERROR"
 
                 info(f"输入验证码: {code}")
-                tab.get_screenshot(path="10.输入验证码.png")
                 i = 0
                 for digit in code:
                     tab.ele(f"@data-index={i}").input(digit)
@@ -248,7 +243,6 @@ def sign_up_account(browser, tab, account_info):
                     i += 1
                 info("验证码输入完成")
                 time.sleep(random.uniform(3, 5))
-                tab.get_screenshot(path="11.验证码输入完成.png")
                 break
         except Exception as e:
             info(f"验证码处理失败: {str(e)}")
@@ -257,7 +251,6 @@ def sign_up_account(browser, tab, account_info):
     info("完成最终验证...")
     handle_turnstile(tab)
     time.sleep(random.uniform(3, 5))
-    tab.get_screenshot(path="12.完成最终验证.png")
     info("账号注册流程完成")
     return "SUCCESS"
 
@@ -402,7 +395,6 @@ def main():
                         current_retry += 1
                 elif result in ["EMAIL_USED", "SIGNUP_RESTRICTED", "VERIFY_FAILED"]:
                     info(f"遇到问题: {result}，准备重试...")
-                    signup_tab.get_screenshot(path="13.遇到问题.png")
                     current_retry += 1
                     # 关闭当前标签页，准备重新开始
                     signup_tab.close()
