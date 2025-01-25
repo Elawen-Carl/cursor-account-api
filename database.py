@@ -58,8 +58,6 @@ class AccountModel(Base):
     password = Column(String, nullable=True)
     token = Column(String, nullable=False)
     usage_limit = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now())
-    updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
 
 @asynccontextmanager
 async def get_session() -> AsyncSession:

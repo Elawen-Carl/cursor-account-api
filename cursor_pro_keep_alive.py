@@ -23,9 +23,9 @@ TOTAL_USAGE = 0
 
 
 def handle_turnstile(tab):
+    info("=============正在检测 Turnstile 验证=============")
     try:
         while True:
-            info("等待验证框架...")
             try:
                 challengeCheck = (
                     tab.ele("@id=cf-turnstile", timeout=2)
@@ -36,27 +36,28 @@ def handle_turnstile(tab):
                 )
 
                 if challengeCheck:
-                    info("找到验证框架，尝试处理...")
+                    info("检测到 Turnstile 验证，正在处理...")
                     time.sleep(random.uniform(1, 3))
                     challengeCheck.click()
                     time.sleep(2)
+                    info("Turnstile 验证通过")
                     return True
             except:
-                info("未找到验证框架")
                 pass
-            info("等待验证码...")
+
             if tab.ele("@name=password"):
+                info("验证成功 - 已到达密码输入页面")
                 break
             if tab.ele("@data-index=0"):
+                info("验证成功 - 已到达验证码输入页面")
                 break
             if tab.ele("Account Settings"):
+                info("验证成功 - 已到达账户设置页面")
                 break
 
             time.sleep(random.uniform(1, 2))
-        
-
     except Exception as e:
-        info("处理验证失败:", str(e))
+        info(f"Turnstile 验证失败: {str(e)}")
         return False
 
 
@@ -86,7 +87,9 @@ def get_cursor_session_token(tab, max_attempts=5, retry_interval=3):
                 cookies = tab.cookies()
                 for cookie in cookies:
                     if cookie.get("name") == "WorkosCursorSessionToken":
-                        return cookie["value"].split("%3A%3A")[1]
+                        token = cookie["value"].split("%3A%3A")[1]
+                        info(f"获取到账号Token: {token}")
+                        return token
 
                 attempts += 1
                 if attempts < max_attempts:
@@ -96,7 +99,7 @@ def get_cursor_session_token(tab, max_attempts=5, retry_interval=3):
                     info("未找到Cursor会话Token")
 
             except Exception as e:
-                info("获取Token失败:", str(e))
+                info(str(e))
                 attempts += 1
                 if attempts < max_attempts:
                     info(f"重试获取Token，等待时间: {retry_interval}")
@@ -105,7 +108,7 @@ def get_cursor_session_token(tab, max_attempts=5, retry_interval=3):
         return False
 
     except Exception as e:
-        warning("获取Token过程出错:", str(e))
+        warning(f"获取Token过程出错: {str(e)}")
         return False
 
 
@@ -114,7 +117,7 @@ def get_temp_email(tab):
     last_email = None
     stable_count = 0
 
-    info("等待获取临时邮箱...")
+    info("=============等待获取临时邮箱=============")
     for i in range(max_retries):
         try:
             email_input = tab.ele("css:input.bg-gray-200[disabled]", timeout=3)
@@ -131,7 +134,7 @@ def get_temp_email(tab):
                         last_email = current_email
                         info(f"当前邮箱: {current_email}")
 
-            info("等待邮箱分配...")
+            info("等待邮箱分配")
             time.sleep(1)
 
         except Exception as e:
@@ -139,55 +142,56 @@ def get_temp_email(tab):
             time.sleep(1)
             stable_count = 0
 
-    info("未能获取邮箱")
+    info("=============未能获取邮箱=============")
     raise ValueError("未能获取邮箱")
 
 
 def sign_up_account(browser, tab, account_info):
-    info("开始注册账号")
+    info("=============开始注册账号=============")
     info(f"账号信息: 邮箱: {account_info['email']}, 姓名: {account_info['first_name']} {account_info['last_name']}")
     tab.get(SIGN_UP_URL)
     time.sleep(random.uniform(4, 6))
     try:
         if tab.ele("@name=first_name"):
-            info("填写名字信息...")
+            info("=============正在填写个人信息=============")
             tab.actions.click("@name=first_name").input(account_info["first_name"])
-            time.sleep(random.uniform(3, 5))
-            tab.get_screenshot(path="1.填写名字.png")
+            info(f"已输入名字: {account_info['first_name']}")
+            time.sleep(random.uniform(1, 3))
 
-            info("填写姓氏信息...")
             tab.actions.click("@name=last_name").input(account_info["last_name"])
-            time.sleep(random.uniform(3, 5))
-            tab.get_screenshot(path="2.填写姓氏.png")
+            info(f"已输入姓氏: {account_info['last_name']}")
+            time.sleep(random.uniform(1, 3))
 
-            info("填写邮箱信息...")
             tab.actions.click("@name=email").input(account_info["email"])
-            time.sleep(random.uniform(3, 5))
-            tab.get_screenshot(path="3.填写邮箱.png")
+            info(f"已输入邮箱: {account_info['email']}")
+            time.sleep(random.uniform(1, 3))
 
+            info("=============提交个人信息=============")
             tab.actions.click("@type=submit")
-            time.sleep(random.uniform(4, 6))
-            info("基本信息提交成功")
-            tab.get_screenshot(path="4.提交基本信息.png")
 
     except Exception as e:
-        info(f"填写姓名信息失败: {str(e)}")
+        info(f"填写个人信息失败: {str(e)}")
         return "ERROR"
 
-    info("处理turnstile...")
     handle_turnstile(tab)
-    tab.get_screenshot(path="5.处理turnstile.png")
-    time.sleep(random.uniform(3, 5))
+    while True:
+        if tab.ele("Can't verify the user is human. Please try again."):
+            info("检测到turnstile验证失败，正在重试...")
+            tab.actions.click("@type=submit")
+            time.sleep(random.uniform(1, 3))
+            handle_turnstile(tab)   
+        else:
+            break
 
     try:
         if tab.ele("@name=password"):
             info("设置密码...")
             tab.ele("@name=password").input(account_info["password"])
-            time.sleep(random.uniform(3, 5))
+            time.sleep(random.uniform(1, 3))
 
+            info("提交密码...")
             tab.ele("@type=submit").click()
-            time.sleep(random.uniform(4, 6))
-            info("密码设置成功")
+            info("密码设置成功,等待系统响应....")
 
             if tab.ele("This email is not available"):
                 info("邮箱已被使用")
@@ -205,16 +209,18 @@ def sign_up_account(browser, tab, account_info):
         info(f"密码设置失败: {str(e)}")
         return "ERROR"
 
-    time.sleep(random.uniform(3, 5))
-    tab.get_screenshot(path="7.检查邮箱是否已被使用.png")
-    info("检查邮箱是否已被使用...")
-    if tab.ele("This email is not available."):
-        info("邮箱已被使用")
-        return "EMAIL_USED"
-    info("邮箱未被使用")
-
     info("处理最终验证...")
     handle_turnstile(tab)
+
+    if tab.ele("This email is not available."):
+        tab.get_screenshot(path="7.检查邮箱是否已被使用.png")
+        info("邮箱已被使用")
+        return "EMAIL_USED"
+    
+    if tab.ele("Sign up is restricted."):
+        tab.get_screenshot(path="8.注册限制.png")
+        info("注册限制")
+        return "SIGNUP_RESTRICTED"
 
     email_handler = EmailVerificationHandler(browser, MAIL_URL)
 
@@ -258,69 +264,11 @@ def sign_up_account(browser, tab, account_info):
 
 class EmailGenerator:
     FIRST_NAMES = [
-        "james",
-        "john",
-        "robert",
-        "michael",
-        "william",
-        "david",
-        "richard",
-        "joseph",
-        "thomas",
-        "charles",
-        "christopher",
-        "daniel",
-        "matthew",
-        "anthony",
-        "donald",
-        "emma",
-        "olivia",
-        "ava",
-        "isabella",
-        "sophia",
-        "mia",
-        "charlotte",
-        "amelia",
-        "harper",
-        "evelyn",
-        "abigail",
-        "emily",
-        "elizabeth",
-        "sofia",
-        "madison",
+        "james","john","robert","michael","william","david","richard","joseph","thomas","charles","christopher","daniel","matthew","anthony","donald","emma","olivia","ava","isabella","sophia","mia","charlotte","amelia","harper","evelyn","abigail","emily","elizabeth","sofia","madison",
     ]
 
     LAST_NAMES = [
-        "smith",
-        "johnson",
-        "williams",
-        "brown",
-        "jones",
-        "garcia",
-        "miller",
-        "davis",
-        "rodriguez",
-        "martinez",
-        "hernandez",
-        "lopez",
-        "gonzalez",
-        "wilson",
-        "anderson",
-        "thomas",
-        "taylor",
-        "moore",
-        "jackson",
-        "martin",
-        "lee",
-        "perez",
-        "thompson",
-        "white",
-        "harris",
-        "sanchez",
-        "clark",
-        "ramirez",
-        "lewis",
-        "robinson",
+        "smith","johnson","williams","brown","jones","garcia","miller","davis","rodriguez","martinez","hernandez","lopez","gonzalez","wilson","anderson","thomas","taylor","moore","jackson","martin","lee","perez","thompson","white","harris","sanchez","clark","ramirez","lewis","robinson",
     ]
 
     def __init__(
@@ -354,12 +302,12 @@ class EmailGenerator:
 
     def _save_account_info(self, token, total_usage):
         try:
-            from database import async_session, AccountModel
+            from database import get_session, AccountModel
             import asyncio
 
             async def save_to_db():
                 info(f"开始保存账号信息: {self.email}")
-                async with async_session() as session:
+                async with get_session() as session:
                     # 检查账号是否已存在
                     from sqlalchemy import select
                     result = await session.execute(
@@ -396,7 +344,8 @@ def cleanup_and_exit(browser_manager=None, exit_code=0):
     try:
         if browser_manager:
             info("正在关闭浏览器")
-            browser_manager.cleanup()
+            if hasattr(browser_manager, 'browser'):
+                browser_manager.browser.quit()
 
         current_process = psutil.Process()
         children = current_process.children(recursive=True)
@@ -435,17 +384,15 @@ def main():
                 email_generator.set_email(email_js)
                 account_info = email_generator.get_account_info()
 
-                signup_tab = browser.new_tab(SIGN_UP_URL)
+                signup_tab = browser.new_tab(LOGIN_URL)
                 browser.activate_tab(signup_tab)
-                time.sleep(2)
 
                 signup_tab.run_js("try { turnstile.reset() } catch(e) { }")
-
                 result = sign_up_account(browser, signup_tab, account_info)
                 
                 if result == "SUCCESS":
                     token = get_cursor_session_token(signup_tab)
-                    info("获取到账号Token:", token)
+                    info(f"获取到账号Token: {token}")
                     if token:
                         email_generator._save_account_info(token, TOTAL_USAGE)
                         info("注册流程完成")
@@ -485,9 +432,9 @@ def main():
         cleanup_and_exit(browser_manager, 1)
 
     except Exception as e:
-        info("主程序错误:", str(e))
+        info(f"主程序错误: {str(e)}")
         import traceback
-        info("错误详情:", traceback.format_exc())
+        info(f"错误详情: {traceback.format_exc()}")
         cleanup_and_exit(browser_manager, 1)
     finally:
         cleanup_and_exit(browser_manager, 1)

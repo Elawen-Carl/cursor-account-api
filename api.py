@@ -102,8 +102,6 @@ class Account(BaseModel):
     password: Optional[str] = None
     token: str
     usage_limit: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
