@@ -19,7 +19,7 @@ from browser_utils import BrowserManager
 from logger import info, error
 
 # 常量定义
-MAX_ACCOUNTS = 50
+MAX_ACCOUNTS = 300
 REGISTRATION_INTERVAL = 60  # 每次注册间隔60秒
 
 # 全局状态追踪
@@ -212,6 +212,44 @@ async def root():
         # 获取当前账号数量
         account_count = await get_account_count()
         
+        # 如果任务未运行，则自动启动注册任务
+        if not background_tasks["registration_task"] or background_tasks["registration_task"].done():
+            # 检查是否已达到最大账号数
+                # 重置注册状态
+            registration_status.update({
+                "is_running": True,
+                "last_status": "starting",
+                "last_run": datetime.now().isoformat(),
+                "next_run": datetime.now().timestamp() + REGISTRATION_INTERVAL,
+                "total_runs": 0,
+                "successful_runs": 0,
+                "failed_runs": 0
+            })
+            
+            # 创建并启动新任务
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(run_registration())
+            background_tasks["registration_task"] = task
+            
+            # 添加任务完成回调
+            def task_done_callback(task):
+                try:
+                    task.result()
+                except asyncio.CancelledError:
+                    info("注册任务被取消")
+                    registration_status["last_status"] = "cancelled"
+                except Exception as e:
+                    error(f"注册任务失败: {str(e)}")
+                    error(traceback.format_exc())
+                    registration_status["last_status"] = "error"
+                finally:
+                    if registration_status["is_running"]:
+                        registration_status["is_running"] = False
+                    background_tasks["registration_task"] = None
+            
+            task.add_done_callback(task_done_callback)
+            info("根路径访问 - 自动启动注册任务")
+        
         return {
             "service": {
                 "name": "Cursor Account API",
@@ -384,6 +422,7 @@ async def delete_account(email: str):
 @app.post("/registration/start", tags=["Registration"])
 async def start_registration():
     """手动启动注册任务"""
+    info("手动启动注册任务")
     global background_tasks, registration_status
     try:
         # 检查是否已达到最大账号数
