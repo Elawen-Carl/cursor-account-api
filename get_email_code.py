@@ -5,9 +5,10 @@ from logger import info, error
 
 
 class EmailVerificationHandler:
-    def __init__(self, browser, mail_url):
+    def __init__(self, browser, tab):
         self.browser = browser
-        self.mail_url = mail_url
+        self.tab = tab
+        self.mail_url = tab.url if tab else None
 
     def get_verification_code(self, email):
         info(f"处理邮箱验证码，当前邮箱: {email}")
@@ -15,14 +16,7 @@ class EmailVerificationHandler:
 
         try:
             info("开始处理邮件")
-            tab_mail = self.browser.new_tab(self.mail_url)
-            self.browser.activate_tab(tab_mail)
-
-            code = self._get_latest_mail_code(tab_mail)
-
-            # self._cleanup_mail(tab_mail)
-
-            tab_mail.close()
+            code = self._get_latest_mail_code(self.tab)
 
         except Exception as e:
             error(f"获取邮箱验证码失败: {str(e)}")
@@ -34,44 +28,43 @@ class EmailVerificationHandler:
         retry_count = 0
         max_retries = 3
 
-        while retry_count < max_retries:
-            try:
-                email_row = tab.ele("css:tbody > tr.border-b.cursor-pointer", timeout=2)
-                if email_row:
-                    subject_cell = email_row.ele("css:td:nth-child(2)")
-                    if subject_cell and "Verify your email address" in subject_cell.text:
-                        info("找到验证邮件")
+        # 特殊处理24mail.json.cm
+        if "24mail.json.cm" in tab.url:
+            while retry_count < max_retries:
+                try:
+                    # 等待并点击邮件列表中的第一个tr
+                    email_row = tab.ele("css:tbody#maillist tr:first-child", timeout=2)
+                    if email_row:
+                        info("找到邮件，点击展开")
                         email_row.click()
                         time.sleep(2)
                         break
 
-                info("等待邮件加载...")
-                time.sleep(2)
-                tab.refresh()
-                time.sleep(3)
-                retry_count += 1
-            
-            except Exception as e:
-                error(f"获取邮件失败: {str(e)}")
-                time.sleep(2)
-                retry_count += 1
+                    retry_count += 1
+                
+                except Exception as e:
+                    error(f"获取邮件失败: {str(e)}")
+                    time.sleep(2)
+                    retry_count += 1
 
-        if retry_count >= max_retries:
-            error("未找到验证邮件")
-            raise Exception("未找到验证邮件")
+            if retry_count >= max_retries:
+                error("未找到验证邮件")
+                raise Exception("未找到验证邮件")
 
+        info("开始获取验证码")
         max_retries = 10
         for attempt in range(max_retries):
             try:
-                content_td = tab.ele("css:td.px-3.text-black.text-base", timeout=2)
+                # 直接获取包含验证码的div
+                content_td = tab.ele("css:div[style*='font-family:-apple-system'][style*='letter-spacing:2px;']", timeout=2)
                 if content_td:
                     content = content_td.text
                     if content:
+                        # 直接获取6位数字
                         matches = re.findall(r'\b\d{6}\b', content)
-                        for match in matches:
-                            if "verification code" in content.lower() or "verify" in content.lower():
-                                info(f"找到验证码: {match}")
-                                return match
+                        if matches:
+                            info(f"找到验证码: {matches[0]}")
+                            return matches[0]
 
                 info("等待验证码加载...")
                 time.sleep(2)

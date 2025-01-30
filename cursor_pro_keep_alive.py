@@ -18,7 +18,7 @@ from get_email_code import EmailVerificationHandler
 LOGIN_URL = "https://authenticator.cursor.sh"
 SIGN_UP_URL = "https://authenticator.cursor.sh/sign-up"
 SETTINGS_URL = "https://www.cursor.com/settings"
-MAIL_URL = "https://mail.cx/zh/"
+MAIL_URL = "https://24mail.json.cm/"
 TOTAL_USAGE = 0
 
 
@@ -27,6 +27,17 @@ def handle_turnstile(tab):
     try:
         while True:
             try:
+                if tab.ele("@name=password"):
+                    info("验证成功 - 已到达密码输入页面")
+                    break
+                if tab.ele("@data-index=0"):
+                    info("验证成功 - 已到达验证码输入页面")
+                    break
+                if tab.ele("Account Settings"):
+                    info("验证成功 - 已到达账户设置页面")
+                    break
+
+                info("检测 Turnstile 验证...")
                 challengeCheck = (
                     tab.ele("@id=cf-turnstile", timeout=2)
                     .child()
@@ -45,15 +56,7 @@ def handle_turnstile(tab):
             except:
                 pass
 
-            if tab.ele("@name=password"):
-                info("验证成功 - 已到达密码输入页面")
-                break
-            if tab.ele("@data-index=0"):
-                info("验证成功 - 已到达验证码输入页面")
-                break
-            if tab.ele("Account Settings"):
-                info("验证成功 - 已到达账户设置页面")
-                break
+            
 
             time.sleep(random.uniform(1, 2))
     except Exception as e:
@@ -112,17 +115,66 @@ def get_cursor_session_token(tab, max_attempts=5, retry_interval=3):
         return False
 
 
+def get_selector_for_url(url):
+    if "22.do" in url:
+        return "css:p.text-email"
+    elif "24mail.json.cm" in url:
+        return "css:input#shortid"
+    elif "internxt.com" in url:
+        return "css:p[data-relingo-block='true']"
+    elif "spambox.xyz" in url:
+        return "css:div#email_id"
+    return None
+
+def get_email_value(element, url):
+    if "24mail.json.cm" in url:
+        # 对于 24mail.json.cm，直接从 input 元素获取值
+        value = element.value;
+        if value:
+            return value;
+        try:
+            # 尝试使用 JavaScript 获取值
+            value = element.run_js("return this.value")
+            if value:
+                return value
+        except:
+            pass
+        return element.attr("value")
+    return element.text
+
+def change_email(tab):
+    try:
+        # 点击 Change 按钮切换邮箱
+        change_button = tab.ele("css:div#idChange")
+        if change_button:
+            change_button.click()
+            time.sleep(2)  # 等待新邮箱生成
+            return True
+        return False
+    except Exception as e:
+        info(f"切换邮箱失败: {str(e)}")
+        return False
+
 def get_temp_email(tab):
     max_retries = 15
     last_email = None
     stable_count = 0
 
     info("=============等待获取临时邮箱=============")
+    
+    # 根据URL选择对应的选择器
+    selector = get_selector_for_url(tab.url)
+    info(f"获取到选择器: {selector}")
+    if not selector:
+        raise ValueError("不支持的邮箱服务提供商")
+
     for i in range(max_retries):
         try:
-            email_input = tab.ele("css:input.bg-gray-200[disabled]", timeout=3)
-            if email_input:
-                current_email = email_input.attr("value")
+            email_element = tab.ele(selector, timeout=3)
+            if email_element:
+
+                # 尝试获取邮箱值
+                current_email = get_email_value(email_element, tab.url)
                 if current_email and "@" in current_email:
                     if current_email == last_email:
                         stable_count += 1
@@ -135,22 +187,21 @@ def get_temp_email(tab):
                         info(f"当前邮箱: {current_email}")
 
             info("等待邮箱分配")
-            time.sleep(1)
+            time.sleep(2)  # 增加等待时间
 
         except Exception as e:
             warning(f"获取邮箱出错: {str(e)}")
-            time.sleep(1)
+            time.sleep(2)  # 增加等待时间
             stable_count = 0
 
     info("=============未能获取邮箱=============")
     raise ValueError("未能获取邮箱")
 
 
-def sign_up_account(browser, tab, account_info):
+def sign_up_account(browser, tab, account_info, mail_tab):
     info("=============开始注册账号=============")
     info(f"账号信息: 邮箱: {account_info['email']}, 姓名: {account_info['first_name']} {account_info['last_name']}")
     tab.get(SIGN_UP_URL)
-    time.sleep(random.uniform(4, 6))
     try:
         if tab.ele("@name=first_name"):
             info("=============正在填写个人信息=============")
@@ -174,36 +225,32 @@ def sign_up_account(browser, tab, account_info):
         return "ERROR"
 
     handle_turnstile(tab)
-    while True:
-        if tab.ele("Can't verify the user is human. Please try again."):
-            info("检测到turnstile验证失败，正在重试...")
-            tab.actions.click("@type=submit")
-            time.sleep(random.uniform(1, 3))
-            handle_turnstile(tab)   
-        else:
-            break
 
+    if tab.ele("Can‘t verify the user is human. Please try again.") or tab.ele("Can't verify the user is human. Please try again."):
+        info("检测到turnstile验证失败，正在重试...")
+        return "EMAIL_USED"
+    
     try:
         if tab.ele("@name=password"):
             info("设置密码...")
             tab.ele("@name=password").input(account_info["password"])
-            time.sleep(random.uniform(1, 3))
+            time.sleep(random.uniform(1, 2))
 
             info("提交密码...")
             tab.ele("@type=submit").click()
             info("密码设置成功,等待系统响应....")
 
-            if tab.ele("This email is not available"):
-                info("邮箱已被使用")
-                return "EMAIL_USED"
+            # if tab.ele("This email is not available"):
+            #     info("邮箱已被使用")
+            #     return "EMAIL_USED"
                 
-            if tab.ele("Sign up is restricted."):
-                info("注册限制")
-                return "SIGNUP_RESTRICTED"
+            # if tab.ele("Sign up is restricted."):
+            #     info("注册限制")
+            #     return "SIGNUP_RESTRICTED"
 
-            if tab.ele("Unable to verify the user is human"):
-                info("需要更换邮箱")
-                return "VERIFY_FAILED"
+            # if tab.ele("Unable to verify the user is human"):
+            #     info("需要更换邮箱")
+            #     return "VERIFY_FAILED"
 
     except Exception as e:
         info(f"密码设置失败: {str(e)}")
@@ -220,7 +267,8 @@ def sign_up_account(browser, tab, account_info):
         info("注册限制")
         return "SIGNUP_RESTRICTED"
 
-    email_handler = EmailVerificationHandler(browser, MAIL_URL)
+    # 创建邮件处理器，使用mail_tab
+    email_handler = EmailVerificationHandler(browser, mail_tab)
 
     while True:
         info("等待注册成功...")
@@ -230,11 +278,15 @@ def sign_up_account(browser, tab, account_info):
                 break
             if tab.ele("@data-index=0"):
                 info("等待验证码...")
+                # 切换到邮箱标签页
+                browser.activate_tab(mail_tab)
                 code = email_handler.get_verification_code(account_info["email"])
                 if not code:
                     info("获取验证码失败")
                     return "ERROR"
 
+                # 切换回注册标签页
+                browser.activate_tab(tab)
                 info(f"输入验证码: {code}")
                 i = 0
                 for digit in code:
@@ -381,7 +433,7 @@ def main():
                 browser.activate_tab(signup_tab)
 
                 signup_tab.run_js("try { turnstile.reset() } catch(e) { }")
-                result = sign_up_account(browser, signup_tab, account_info)
+                result = sign_up_account(browser, signup_tab, account_info, mail_tab)
                 
                 if result == "SUCCESS":
                     token = get_cursor_session_token(signup_tab)
@@ -394,19 +446,26 @@ def main():
                         info("获取Cursor会话Token失败")
                         current_retry += 1
                 elif result in ["EMAIL_USED", "SIGNUP_RESTRICTED", "VERIFY_FAILED"]:
-                    info(f"遇到问题: {result}，准备重试...")
+                    info(f"遇到问题: {result}，尝试切换邮箱...")
+                    browser.activate_tab(mail_tab)  # 切换到邮箱标签页
+                    if change_email(mail_tab):
+                        new_email = get_temp_email(mail_tab)
+                        if new_email:
+                            info(f"成功切换到新邮箱: {new_email}")
+                            account_info['email'] = new_email
+                            browser.activate_tab(signup_tab)  # 切换回注册标签页
+                            continue  # 使用新邮箱重试注册
+                    info("切换邮箱失败，准备重试...")
                     current_retry += 1
-                    # 关闭当前标签页，准备重新开始
-                    signup_tab.close()
-                    mail_tab.close()
-                    time.sleep(2)
                 else:  # ERROR
                     info("遇到错误，准备重试...")
                     current_retry += 1
-                    signup_tab.close()
-                    mail_tab.close()
-                    time.sleep(2)
-                    
+
+                # 关闭标签页，准备下一次尝试
+                signup_tab.close()
+                mail_tab.close()
+                time.sleep(2)
+
             except Exception as e:
                 info(f"当前尝试发生错误: {str(e)}")
                 current_retry += 1

@@ -9,8 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
 import asyncio
-import subprocess
-import sys
 import os
 import traceback
 from fastapi.responses import JSONResponse
@@ -20,7 +18,7 @@ from logger import info, error
 
 # 常量定义
 MAX_ACCOUNTS = 300
-REGISTRATION_INTERVAL = 60  # 每次注册间隔60秒
+REGISTRATION_INTERVAL = 15  # 每次注册间隔60秒
 
 # 全局状态追踪
 registration_status = {
