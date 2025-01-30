@@ -59,7 +59,7 @@ class BrowserManager:
         co.set_pref("screen.height", 1080)
         co.set_pref("screen.pixelDepth", 24)
         co.auto_port()
-        co.headless(os.getenv('BROWSER_HEADLESS', 'True').lower() == 'false')  # 生产环境使用无头模式
+        co.headless(os.getenv('BROWSER_HEADLESS', 'True').lower() == 'true')  # 生产环境使用无头模式
 
         # Mac 系统特殊处理
         if sys.platform == "darwin":
