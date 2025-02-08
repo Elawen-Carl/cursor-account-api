@@ -41,63 +41,6 @@ registration_status = {
 background_tasks = {"registration_task": None}
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    try:
-        await init_db()
-        # 初始化注册状态
-        global registration_status
-        registration_status.update(
-            {
-                "is_running": False,
-                "last_status": None,
-                "last_run": None,
-                "next_run": None,
-                "total_runs": 0,
-                "successful_runs": 0,
-                "failed_runs": 0,
-            }
-        )
-        info("系统启动完成，数据库已初始化")
-        yield
-    except Exception as e:
-        error(f"系统启动失败: {str(e)}")
-        error(traceback.format_exc())
-        raise
-    finally:
-        try:
-            # 确保所有后台任务都被正确取消
-            tasks = []
-            if (
-                background_tasks["registration_task"]
-                and not background_tasks["registration_task"].done()
-            ):
-                background_tasks["registration_task"].cancel()
-                tasks.append(background_tasks["registration_task"])
-
-            # 等待所有任务完成或被取消
-            if tasks:
-                await asyncio.wait(tasks, timeout=5.0)
-                for task in tasks:
-                    try:
-                        if not task.done():
-                            task.cancel()
-                        await task
-                    except asyncio.CancelledError:
-                        info("任务已取消")
-                    except Exception as e:
-                        error(f"取消任务时出错: {str(e)}")
-
-            # 重置状态
-            background_tasks["registration_task"] = None
-            registration_status["is_running"] = False
-
-            info("系统关闭完成")
-        except Exception as e:
-            error(f"系统关闭出错: {str(e)}")
-            error(traceback.format_exc())
-
-
 app = FastAPI(
     title="Cursor Account API",
     description="API for managing Cursor accounts",
@@ -105,7 +48,6 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     debug=os.getenv("DEBUG", "false").lower() == "true",
-    lifespan=lifespan,
 )
 
 # 添加CORS中间件
@@ -163,10 +105,21 @@ async def run_registration():
                 registration_status["last_run"] = datetime.now().isoformat()
                 registration_status["total_runs"] += 1
 
-                # 使用线程池执行同步注册任务
-                loop = asyncio.get_running_loop()
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    success = await loop.run_in_executor(pool, register_account)
+                # 初始化浏览器管理器
+                if not browser_manager:
+                    browser_manager = BrowserManager()
+                    if not browser_manager.init_browser():
+                        error("浏览器初始化失败，终止注册任务")
+                        registration_status["failed_runs"] += 1
+                        registration_status["last_status"] = "error"
+                        registration_status["is_running"] = False
+                        break
+
+                # 调用注册函数
+                try:
+                    success = await asyncio.get_event_loop().run_in_executor(
+                        None, register_account
+                    )
 
                     if success:
                         registration_status["successful_runs"] += 1
@@ -176,11 +129,22 @@ async def run_registration():
                         registration_status["failed_runs"] += 1
                         registration_status["last_status"] = "failed"
                         info("注册失败")
+                except SystemExit:
+                    # 捕获 SystemExit 异常，这是注册脚本正常退出的方式
+                    info("注册脚本正常退出")
+                    if registration_status["last_status"] != "error":
+                        registration_status["last_status"] = "completed"
+                except Exception as e:
+                    error(f"注册过程执行出错: {str(e)}")
+                    error(traceback.format_exc())
+                    registration_status["failed_runs"] += 1
+                    registration_status["last_status"] = "error"
 
                 # 更新下次运行时间
                 next_run = datetime.now().timestamp() + REGISTRATION_INTERVAL
                 registration_status["next_run"] = next_run
 
+                info(f"等待 {REGISTRATION_INTERVAL} 秒后进行下一次尝试")
                 await asyncio.sleep(REGISTRATION_INTERVAL)
 
             except asyncio.CancelledError:
@@ -194,7 +158,13 @@ async def run_registration():
                 if not registration_status["is_running"]:
                     break
                 await asyncio.sleep(REGISTRATION_INTERVAL)
-
+    except asyncio.CancelledError:
+        info("注册任务被取消")
+        raise
+    except Exception as e:
+        error(f"注册任务致命错误: {str(e)}")
+        error(traceback.format_exc())
+        raise
     finally:
         registration_status["is_running"] = False
         if browser_manager:
@@ -202,6 +172,7 @@ async def run_registration():
                 browser_manager.cleanup()
             except Exception as e:
                 error(f"清理浏览器资源时出错: {str(e)}")
+                error(traceback.format_exc())
 
 
 @app.get("/", tags=["General"])

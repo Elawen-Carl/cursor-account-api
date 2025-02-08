@@ -548,8 +548,6 @@ def main():
                     pass
 
         info(f"达到最大重试次数 {max_retries}，注册失败")
-        cleanup_and_exit(browser_manager, 1)
-
     except Exception as e:
         info(f"主程序错误: {str(e)}")
         import traceback
