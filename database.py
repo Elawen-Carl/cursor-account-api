@@ -9,26 +9,28 @@ from logger import info, error
 
 load_dotenv()
 
+
 def get_database_url():
     """获取数据库URL并验证配置"""
     required_vars = {
-        'POSTGRES_USER': os.getenv('POSTGRES_USER'),
-        'POSTGRES_PASSWORD': os.getenv('POSTGRES_PASSWORD'),
-        'POSTGRES_HOST': os.getenv('POSTGRES_HOST'),
-        'POSTGRES_DATABASE': os.getenv('POSTGRES_DATABASE')
+        "POSTGRES_USER": os.getenv("POSTGRES_USER"),
+        "POSTGRES_PASSWORD": os.getenv("POSTGRES_PASSWORD"),
+        "POSTGRES_HOST": os.getenv("POSTGRES_HOST"),
+        "POSTGRES_DATABASE": os.getenv("POSTGRES_DATABASE"),
     }
-    
+
     # 检查所有必需的环境变量
     missing_vars = [key for key, value in required_vars.items() if not value]
     if missing_vars:
         error_msg = f"缺少必需的环境变量: {', '.join(missing_vars)}"
         error(error_msg)
         raise ValueError(error_msg)
-    
+
     # 构建数据库URL
     url = f"postgresql+asyncpg://{required_vars['POSTGRES_USER']}:{required_vars['POSTGRES_PASSWORD']}@{required_vars['POSTGRES_HOST']}/{required_vars['POSTGRES_DATABASE']}"
     info("数据库配置加载成功")
     return url
+
 
 def create_engine():
     """创建数据库引擎"""
@@ -39,25 +41,28 @@ def create_engine():
         connect_args={
             "ssl": True,
             "server_settings": {"client_encoding": "utf8"},
-            "command_timeout": 10
+            "command_timeout": 10,
         },
         pool_pre_ping=True,
         poolclass=None,  # 禁用连接池
-        future=True
+        future=True,
     )
+
 
 # 基础模型类
 class Base(DeclarativeBase):
     pass
 
+
 # 账号模型
 class AccountModel(Base):
     __tablename__ = "accounts"
-    
     email = Column(String, primary_key=True)
+    user = Column(String, nullable=False)
     password = Column(String, nullable=True)
     token = Column(String, nullable=False)
     usage_limit = Column(Text, nullable=True)
+
 
 @asynccontextmanager
 async def get_session() -> AsyncSession:
@@ -65,12 +70,9 @@ async def get_session() -> AsyncSession:
     # 为每个请求创建新的引擎和会话
     engine = create_engine()
     async_session = async_sessionmaker(
-        engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        future=True
+        engine, class_=AsyncSession, expire_on_commit=False, future=True
     )
-    
+
     session = async_session()
     try:
         # 确保连接有效
@@ -93,6 +95,7 @@ async def get_session() -> AsyncSession:
         except Exception as e:
             error(f"释放引擎时出错: {str(e)}")
 
+
 async def init_db():
     """初始化数据库表结构"""
     try:
@@ -103,4 +106,4 @@ async def init_db():
         info("数据库初始化成功")
     except Exception as e:
         error(f"数据库初始化失败: {str(e)}")
-        raise 
+        raise

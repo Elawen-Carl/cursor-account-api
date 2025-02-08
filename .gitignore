@@ -28,18 +28,11 @@ ENV/
 
 # IDE
 .idea/
-.vscode/
-*.swp
-*.swo
 
-# 日志
-logs/
-*.log
+# 测试覆盖率
+.coverage
+coverage.xml
+htmlcov/
 
-# 本地数据
-cursor_accounts.txt
-
-# 操作系统
-.DS_Store
-Thumbs.db 
+# Vercel
 .vercel

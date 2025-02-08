@@ -1,0 +1,170 @@
+2025-02-05 01:16:48 - INFO - 数据库配置加载成功
+2025-02-05 01:16:57 - INFO - 数据库初始化成功
+2025-02-05 01:16:57 - INFO - 系统启动完成，数据库已初始化
+2025-02-05 01:23:54 - INFO - 数据库配置加载成功
+2025-02-05 01:24:09 - INFO - 手动启动注册任务
+2025-02-05 01:24:09 - INFO - 数据库配置加载成功
+2025-02-05 01:24:20 - INFO - 手动启动注册任务
+2025-02-05 01:24:20 - INFO - 注册任务开始运行
+2025-02-05 01:24:20 - INFO - 数据库配置加载成功
+2025-02-05 01:24:30 - INFO - 开始注册尝试 (当前账号数: 0/20)
+2025-02-05 01:24:30 - INFO - 插件路径: E:\bzWorkplace\cursor-account-api\turnstilePatch
+2025-02-05 01:24:38 - INFO - =============等待获取临时邮箱=============
+2025-02-05 01:24:38 - INFO - 获取到选择器: css:input#shortid
+2025-02-05 01:24:38 - INFO - 当前邮箱: nbq-4g3pus@24mail.json.cm
+2025-02-05 01:24:38 - INFO - 等待邮箱分配
+2025-02-05 01:24:40 - INFO - 等待邮箱分配
+2025-02-05 01:24:42 - INFO - 成功获取邮箱
+2025-02-05 01:24:46 - INFO - =============开始注册账号=============
+2025-02-05 01:24:46 - INFO - 账号信息: 邮箱: nbq-4g3pus@24mail.json.cm, 姓名: James Taylor
+2025-02-05 01:24:48 - INFO - =============正在填写个人信息=============
+2025-02-05 01:24:49 - INFO - 已输入名字: James
+2025-02-05 01:24:51 - INFO - 已输入姓氏: Taylor
+2025-02-05 01:24:52 - INFO - 已输入邮箱: nbq-4g3pus@24mail.json.cm
+2025-02-05 01:24:54 - INFO - =============提交个人信息=============
+2025-02-05 01:24:54 - INFO - =============正在检测 Turnstile 验证=============
+2025-02-05 01:24:56 - INFO - 验证成功 - 已到达密码输入页面
+2025-02-05 01:25:16 - INFO - 设置密码...
+2025-02-05 01:25:18 - INFO - 提交密码...
+2025-02-05 01:25:18 - INFO - 密码设置成功,等待系统响应....
+2025-02-05 01:25:18 - INFO - 处理最终验证...
+2025-02-05 01:25:18 - INFO - =============正在检测 Turnstile 验证=============
+2025-02-05 01:25:18 - INFO - 验证成功 - 已到达密码输入页面
+2025-02-05 01:25:38 - INFO - 等待注册成功...
+2025-02-05 01:25:48 - INFO - 等待验证码...
+2025-02-05 01:25:48 - INFO - 处理邮箱验证码，当前邮箱: nbq-4g3pus@24mail.json.cm
+2025-02-05 01:25:48 - INFO - 开始处理邮件
+2025-02-05 01:25:48 - INFO - 找到邮件，点击展开
+2025-02-05 01:25:51 - INFO - 开始获取验证码
+2025-02-05 01:25:51 - INFO - 找到验证码: 112878
+2025-02-05 01:25:51 - INFO - 输入验证码: 112878
+2025-02-05 01:25:53 - INFO - 验证码输入完成
+2025-02-05 01:25:56 - INFO - 完成最终验证...
+2025-02-05 01:25:56 - INFO - =============正在检测 Turnstile 验证=============
+2025-02-05 01:26:17 - INFO - 验证成功 - 已到达账户设置页面
+2025-02-05 01:26:21 - INFO - 账号注册流程完成
+2025-02-05 01:26:28 - INFO - 使用限制: 150
+2025-02-05 01:26:28 - INFO - 获取Cookie中...
+2025-02-05 01:26:28 - INFO - 获取到账号Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhdXRoMHx1c2VyXzAxSks4WlhGQjRXREhCQU1TTlFSUUIwVDNIIiwidGltZSI6IjE3Mzg2ODk5NTciLCJyYW5kb21uZXNzIjoiOTYxNjczNjEtOGE5Zi00YmY4IiwiZXhwIjo0MzMwNjg5OTU3LCJpc3MiOiJodHRwczovL2F1dGhlbnRpY2F0aW9uLmN1cnNvci5zaCIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwgb2ZmbGluZV9hY2Nlc3MiLCJhdWQiOiJodHRwczovL2N1cnNvci5jb20ifQ.owriRBQbB7_m5uS_inOB7M76OlWcJ5C2cZb0_4vADcI, 用户: user_01JK8ZXFB4WDHBAMSNQRQB0T3H
+2025-02-05 01:26:28 - INFO - 获取到账号Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhdXRoMHx1c2VyXzAxSks4WlhGQjRXREhCQU1TTlFSUUIwVDNIIiwidGltZSI6IjE3Mzg2ODk5NTciLCJyYW5kb21uZXNzIjoiOTYxNjczNjEtOGE5Zi00YmY4IiwiZXhwIjo0MzMwNjg5OTU3LCJpc3MiOiJodHRwczovL2F1dGhlbnRpY2F0aW9uLmN1cnNvci5zaCIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwgb2ZmbGluZV9hY2Nlc3MiLCJhdWQiOiJodHRwczovL2N1cnNvci5jb20ifQ.owriRBQbB7_m5uS_inOB7M76OlWcJ5C2cZb0_4vADcI, 用户: user_01JK8ZXFB4WDHBAMSNQRQB0T3H
+2025-02-05 01:26:28 - INFO - 开始保存账号信息: nbq-4g3pus@24mail.json.cm
+2025-02-05 01:26:28 - INFO - 数据库配置加载成功
+2025-02-05 01:26:35 - INFO - 创建新账号记录
+2025-02-05 01:26:36 - INFO - 账号 nbq-4g3pus@24mail.json.cm 信息保存成功
+2025-02-05 01:26:36 - INFO - 注册流程完成
+2025-02-05 01:26:36 - INFO - 正在关闭浏览器
+2025-02-05 01:26:37 - INFO - 程序正常退出
+2025-02-05 01:26:37 - INFO - 正在关闭浏览器
+2025-02-05 01:26:37 - INFO - 程序正常退出
+2025-02-05 01:26:37 - INFO - 系统关闭完成
+2025-02-05 02:19:01 - INFO - 数据库配置加载成功
+2025-02-05 02:19:13 - ERROR - 数据库初始化失败: [Errno 11001] getaddrinfo failed
+2025-02-05 02:19:13 - ERROR - 系统启动失败: [Errno 11001] getaddrinfo failed
+2025-02-05 02:19:13 - ERROR - Traceback (most recent call last):
+  File "E:\bzWorkplace\cursor-account-api\api.py", line 48, in lifespan
+    await init_db()
+  File "E:\bzWorkplace\cursor-account-api\database.py", line 103, in init_db
+    async with engine.begin() as conn:
+               ^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py", line 1066, in begin
+    async with conn:
+               ^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\ext\asyncio\base.py", line 125, in __aenter__
+    return await self.start(is_ctxmanager=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py", line 270, in start
+    await greenlet_spawn(self.sync_engine.connect)
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 200, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 3269, in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 145, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 3293, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\base.py", line 452, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\base.py", line 1269, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\base.py", line 716, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\impl.py", line 169, in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\impl.py", line 167, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\base.py", line 393, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\base.py", line 678, in __init__
+    self.__connect()
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\base.py", line 902, in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\pool\base.py", line 898, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\create.py", line 645, in connect
+    return dialect.connect(*cargs, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\default.py", line 616, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 941, in connect
+    await_only(creator_fn(*arg, **kw)),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 130, in await_only
+    return current.driver.switch(awaitable)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 195, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\asyncpg\connection.py", line 2329, in connect
+    return await connect_utils._connect(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\asyncpg\connect_utils.py", line 1017, in _connect
+    raise last_error or exceptions.TargetServerAttributeNotMatched(
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\asyncpg\connect_utils.py", line 991, in _connect
+    conn = await _connect_addr(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\asyncpg\connect_utils.py", line 824, in _connect_addr
+    return await __connect_addr(params, False, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\asyncpg\connect_utils.py", line 873, in __connect_addr
+    tr, pr = await connector
+             ^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\site-packages\asyncpg\connect_utils.py", line 744, in _create_ssl_connection
+    tr, pr = await loop.create_connection(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1078, in create_connection
+    infos = await self._ensure_resolved(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1461, in _ensure_resolved
+    return await loop.getaddrinfo(host, port, family=family, type=type,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 900, in getaddrinfo
+    return await self.run_in_executor(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\30386\AppData\Local\Programs\Python\Python312\Lib\socket.py", line 976, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno 11001] getaddrinfo failed
+

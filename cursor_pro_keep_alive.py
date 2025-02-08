@@ -56,8 +56,6 @@ def handle_turnstile(tab):
             except:
                 pass
 
-            
-
             time.sleep(random.uniform(1, 2))
     except Exception as e:
         info(f"Turnstile 验证失败: {str(e)}")
@@ -90,9 +88,10 @@ def get_cursor_session_token(tab, max_attempts=5, retry_interval=3):
                 cookies = tab.cookies()
                 for cookie in cookies:
                     if cookie.get("name") == "WorkosCursorSessionToken":
+                        user = cookie["value"].split("%3A%3A")[0]
                         token = cookie["value"].split("%3A%3A")[1]
-                        info(f"获取到账号Token: {token}")
-                        return token
+                        info(f"获取到账号Token: {token}, 用户: {user}")
+                        return token, user
 
                 attempts += 1
                 if attempts < max_attempts:
@@ -126,12 +125,13 @@ def get_selector_for_url(url):
         return "css:div#email_id"
     return None
 
+
 def get_email_value(element, url):
     if "24mail.json.cm" in url:
         # 对于 24mail.json.cm，直接从 input 元素获取值
-        value = element.value;
+        value = element.value
         if value:
-            return value;
+            return value
         try:
             # 尝试使用 JavaScript 获取值
             value = element.run_js("return this.value")
@@ -141,6 +141,7 @@ def get_email_value(element, url):
             pass
         return element.attr("value")
     return element.text
+
 
 def change_email(tab):
     try:
@@ -155,13 +156,14 @@ def change_email(tab):
         info(f"切换邮箱失败: {str(e)}")
         return False
 
+
 def get_temp_email(tab):
     max_retries = 15
     last_email = None
     stable_count = 0
 
     info("=============等待获取临时邮箱=============")
-    
+
     # 根据URL选择对应的选择器
     selector = get_selector_for_url(tab.url)
     info(f"获取到选择器: {selector}")
@@ -200,7 +202,9 @@ def get_temp_email(tab):
 
 def sign_up_account(browser, tab, account_info, mail_tab):
     info("=============开始注册账号=============")
-    info(f"账号信息: 邮箱: {account_info['email']}, 姓名: {account_info['first_name']} {account_info['last_name']}")
+    info(
+        f"账号信息: 邮箱: {account_info['email']}, 姓名: {account_info['first_name']} {account_info['last_name']}"
+    )
     tab.get(SIGN_UP_URL)
     try:
         if tab.ele("@name=first_name"):
@@ -226,10 +230,12 @@ def sign_up_account(browser, tab, account_info, mail_tab):
 
     handle_turnstile(tab)
 
-    if tab.ele("Can‘t verify the user is human. Please try again.") or tab.ele("Can't verify the user is human. Please try again."):
+    if tab.ele("Can‘t verify the user is human. Please try again.") or tab.ele(
+        "Can't verify the user is human. Please try again."
+    ):
         info("检测到turnstile验证失败，正在重试...")
         return "EMAIL_USED"
-    
+
     try:
         if tab.ele("@name=password"):
             info("设置密码...")
@@ -243,7 +249,7 @@ def sign_up_account(browser, tab, account_info, mail_tab):
             # if tab.ele("This email is not available"):
             #     info("邮箱已被使用")
             #     return "EMAIL_USED"
-                
+
             # if tab.ele("Sign up is restricted."):
             #     info("注册限制")
             #     return "SIGNUP_RESTRICTED"
@@ -262,7 +268,7 @@ def sign_up_account(browser, tab, account_info, mail_tab):
     if tab.ele("This email is not available."):
         info("邮箱已被使用")
         return "EMAIL_USED"
-    
+
     if tab.ele("Sign up is restricted."):
         info("注册限制")
         return "SIGNUP_RESTRICTED"
@@ -309,11 +315,69 @@ def sign_up_account(browser, tab, account_info, mail_tab):
 
 class EmailGenerator:
     FIRST_NAMES = [
-        "james","john","robert","michael","william","david","richard","joseph","thomas","charles","christopher","daniel","matthew","anthony","donald","emma","olivia","ava","isabella","sophia","mia","charlotte","amelia","harper","evelyn","abigail","emily","elizabeth","sofia","madison",
+        "james",
+        "john",
+        "robert",
+        "michael",
+        "william",
+        "david",
+        "richard",
+        "joseph",
+        "thomas",
+        "charles",
+        "christopher",
+        "daniel",
+        "matthew",
+        "anthony",
+        "donald",
+        "emma",
+        "olivia",
+        "ava",
+        "isabella",
+        "sophia",
+        "mia",
+        "charlotte",
+        "amelia",
+        "harper",
+        "evelyn",
+        "abigail",
+        "emily",
+        "elizabeth",
+        "sofia",
+        "madison",
     ]
 
     LAST_NAMES = [
-        "smith","johnson","williams","brown","jones","garcia","miller","davis","rodriguez","martinez","hernandez","lopez","gonzalez","wilson","anderson","thomas","taylor","moore","jackson","martin","lee","perez","thompson","white","harris","sanchez","clark","ramirez","lewis","robinson",
+        "smith",
+        "johnson",
+        "williams",
+        "brown",
+        "jones",
+        "garcia",
+        "miller",
+        "davis",
+        "rodriguez",
+        "martinez",
+        "hernandez",
+        "lopez",
+        "gonzalez",
+        "wilson",
+        "anderson",
+        "thomas",
+        "taylor",
+        "moore",
+        "jackson",
+        "martin",
+        "lee",
+        "perez",
+        "thompson",
+        "white",
+        "harris",
+        "sanchez",
+        "clark",
+        "ramirez",
+        "lewis",
+        "robinson",
     ]
 
     def __init__(
@@ -345,7 +409,7 @@ class EmailGenerator:
             "last_name": self.default_last_name.capitalize(),
         }
 
-    def _save_account_info(self, token, total_usage):
+    def _save_account_info(self, user, token, total_usage):
         try:
             from database import get_session, AccountModel
             import asyncio
@@ -355,14 +419,16 @@ class EmailGenerator:
                 async with get_session() as session:
                     # 检查账号是否已存在
                     from sqlalchemy import select
+
                     result = await session.execute(
                         select(AccountModel).where(AccountModel.email == self.email)
                     )
                     existing_account = result.scalar_one_or_none()
-                    
+
                     if existing_account:
                         info("更新现有账号信息")
                         existing_account.token = token
+                        existing_account.user = user
                         existing_account.password = self.default_password
                         existing_account.usage_limit = str(total_usage)
                     else:
@@ -371,10 +437,11 @@ class EmailGenerator:
                             email=self.email,
                             password=self.default_password,
                             token=token,
-                            usage_limit=str(total_usage)
+                            user=user,
+                            usage_limit=str(total_usage),
                         )
                         session.add(account)
-                    
+
                     await session.commit()
                     info(f"账号 {self.email} 信息保存成功")
                     return True
@@ -384,12 +451,13 @@ class EmailGenerator:
             info(f"保存账号信息失败: {str(e)}")
             return False
 
+
 def cleanup_and_exit(browser_manager=None, exit_code=0):
     """清理资源并退出程序"""
     try:
         if browser_manager:
             info("正在关闭浏览器")
-            if hasattr(browser_manager, 'browser'):
+            if hasattr(browser_manager, "browser"):
                 browser_manager.browser.quit()
 
         current_process = psutil.Process()
@@ -412,11 +480,11 @@ def main():
     browser_manager = None
     max_retries = 3  # 最大重试次数
     current_retry = 0
-    
+
     try:
         browser_manager = BrowserManager()
         browser = browser_manager.init_browser()
-        
+
         while current_retry < max_retries:
             try:
                 mail_tab = browser.new_tab(MAIL_URL)
@@ -434,12 +502,12 @@ def main():
 
                 signup_tab.run_js("try { turnstile.reset() } catch(e) { }")
                 result = sign_up_account(browser, signup_tab, account_info, mail_tab)
-                
+
                 if result == "SUCCESS":
-                    token = get_cursor_session_token(signup_tab)
-                    info(f"获取到账号Token: {token}")
+                    token, user = get_cursor_session_token(signup_tab)
+                    info(f"获取到账号Token: {token}, 用户: {user}")
                     if token:
-                        email_generator._save_account_info(token, TOTAL_USAGE)
+                        email_generator._save_account_info(user, token, TOTAL_USAGE)
                         info("注册流程完成")
                         cleanup_and_exit(browser_manager, 0)
                     else:
@@ -452,7 +520,7 @@ def main():
                         new_email = get_temp_email(mail_tab)
                         if new_email:
                             info(f"成功切换到新邮箱: {new_email}")
-                            account_info['email'] = new_email
+                            account_info["email"] = new_email
                             browser.activate_tab(signup_tab)  # 切换回注册标签页
                             continue  # 使用新邮箱重试注册
                     info("切换邮箱失败，准备重试...")
@@ -472,19 +540,20 @@ def main():
                 time.sleep(2)
                 try:
                     # 尝试关闭可能存在的标签页
-                    if 'signup_tab' in locals():
+                    if "signup_tab" in locals():
                         signup_tab.close()
-                    if 'mail_tab' in locals():
+                    if "mail_tab" in locals():
                         mail_tab.close()
                 except:
                     pass
-                
+
         info(f"达到最大重试次数 {max_retries}，注册失败")
         cleanup_and_exit(browser_manager, 1)
 
     except Exception as e:
         info(f"主程序错误: {str(e)}")
         import traceback
+
         info(f"错误详情: {traceback.format_exc()}")
         cleanup_and_exit(browser_manager, 1)
     finally:
