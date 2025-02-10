@@ -504,7 +504,7 @@ async def start_registration():
         )
 
 
-@app.post("/registration/stop", tags=["Registration"])
+@app.get("/registration/stop", tags=["Registration"])
 async def stop_registration():
     """手动停止注册任务"""
     global background_tasks

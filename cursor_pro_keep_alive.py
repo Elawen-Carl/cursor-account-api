@@ -275,8 +275,8 @@ def sign_up_account(browser, tab, account_info, mail_tab):
 
     # 创建邮件处理器，使用mail_tab
     email_handler = EmailVerificationHandler(browser, mail_tab)
-
-    while True:
+    i = 0
+    while i < 5:
         info("等待注册成功...")
         try:
             if tab.ele("Account Settings"):

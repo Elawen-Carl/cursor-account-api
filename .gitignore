@@ -36,3 +36,6 @@ htmlcov/
 
 # Vercel
 .vercel
+
+logs/*
+*.log
