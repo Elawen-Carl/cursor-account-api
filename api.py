@@ -169,7 +169,9 @@ async def run_registration():
         registration_status["is_running"] = False
         if browser_manager:
             try:
-                browser_manager.cleanup()
+                from cursor_pro_keep_alive import cleanup_and_exit
+
+                cleanup_and_exit(browser_manager, 0)
             except Exception as e:
                 error(f"清理浏览器资源时出错: {str(e)}")
                 error(traceback.format_exc())
